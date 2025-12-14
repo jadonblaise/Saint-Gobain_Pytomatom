@@ -1,0 +1,100 @@
+# -- Modular settings ---------------------------------------------------------
+# These settings are imported in the __init__.py of the base directory explicitly.
+# To add a new setting, also edit the __init__.py
+# -----------------------------------------------------------------------------
+# DATABASES
+# https://docs.djangoproject.com/en/4.2/ref/settings/#databases
+from environs import Env
+
+
+def define_databases(env: Env) -> dict:
+    """
+    Define databases for the project.
+    will be read from .env files or the environment provided.
+    """
+    # pylint: disable=invalid-name
+    # pylint: disable=possibly-unused-variable
+    # --- POSTGRES ----------------------------------------------------------------
+
+    POSTGRES_DB = env.str("POSTGRES_DB", default="pytomatom")
+    POSTGRES_USER = env.str("POSTGRES_USER")
+    POSTGRES_PASSWORD = env.str("POSTGRES_PASSWORD")
+    POSTGRES_HOST = env.str("POSTGRES_HOST")
+    POSTGRES_PORT = env.int("POSTGRES_PORT")
+    POSTGRES_OPTIONS = env.str("POSTGRES_OPTIONS", default="")
+    POSTGRES_CONNECTION_STRING = (
+        f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}"
+        + f"@{POSTGRES_HOST}:{POSTGRES_PORT}/{POSTGRES_DB}{POSTGRES_OPTIONS}"
+    )
+    DATABASE_URL = env.str("DATABASE_URL", default=POSTGRES_CONNECTION_STRING)
+    DATABASES = {
+        "default": {
+            "HOST": POSTGRES_HOST,
+            "NAME": POSTGRES_DB,
+            "PORT": POSTGRES_PORT,
+            "USER": POSTGRES_USER,
+            "PASSWORD": POSTGRES_PASSWORD,
+            "ENGINE": "django.db.backends.postgresql",
+            # see notes om connections: https://docs.djangoproject.com/en/4.2/ref/databases/#general-notes
+            "CONN_MAX_AGE": 0,
+            # "CONN_HEALTH_CHECKS": False,
+            "OPTIONS": {"sslmode": "prefer"},
+        }
+    }
+
+    # --- REDIS ---------------------------------------------------------------
+    REDIS_PASSWORD = env.str("REDIS_PASSWORD", default="")
+    redis_default = POSTGRES_HOST if "POSTGRES_HOST" in locals() else "localhost"
+    REDIS_HOST = env.str("REDIS_HOST", default=redis_default)
+    REDIS_PORT = env.int("REDIS_PORT", default=6379)
+    REDIS_DATABASE_NAMESPACE = env.str("REDIS_DATABASE_NAMESPACE", default="0")
+    redisurlpass = f":{REDIS_PASSWORD}@" if REDIS_PASSWORD else ""
+    REDIS_URL = env.str(
+        "REDIS_URL",
+        default=f"redis://{redisurlpass}{REDIS_HOST}:{REDIS_PORT}/{REDIS_DATABASE_NAMESPACE}",
+    )
+    del redisurlpass
+
+    # pylint: enable=invalid-name
+    # pylint: enable=possibly-unused-variable
+
+    # ! shall not return the env, we didn't want to modify
+    del env
+    return locals()
+
+
+# -----------------------------------------------------------------------------
+
+# Default primary key field type
+# https://docs.djangoproject.com/en/4.1/ref/settings/#default-auto-field
+DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        "LOCATION": "unique-snowflake-pytomatom-cache",
+    },
+    "redis": {
+        "BACKEND": "django_redis.cache.RedisCache",
+        "LOCATION": "",
+        "OPTIONS": {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+            # http://niwinz.github.io/django-redis/latest/#_memcached_exceptions_behavior,
+            "IGNORE_EXCEPTIONS": True,  # mimics memcache behavior.
+            # connection pool kwargs to configure the use of certificates
+            "CONNECTION_POOL_KWARGS": {
+                # "ssl_cert_reqs": None
+                # 'ssl_ca_certs': REDIS_CA_FILE,
+                # 'ssl_certfile': REDIS_CERT_FILE,
+                # 'ssl_keyfile': REDIS_KEY_FILE,
+            },
+        },
+    },
+    "jwt-blacklist": {
+        # ! this is not thread-safe and not recommended, if you use multiple workers
+        # 'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        # ! this is slow in production. Maybe use redis or memcached
+        "BACKEND": "django.core.cache.backends.db.DatabaseCache",
+        "LOCATION": "blacklisted_jwts_cache",
+    },
+}

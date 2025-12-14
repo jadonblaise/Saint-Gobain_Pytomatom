@@ -1,0 +1,23 @@
+"""
+ASGI config for pytomatom project.
+
+It exposes the ASGI callable as a module-level variable named ``application``.
+
+For more information on this file, see
+https://docs.djangoproject.com/en/4.1/howto/deployment/asgi/
+"""
+
+import os
+
+from django.core.asgi import get_asgi_application
+
+from config import startup
+
+
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings.production")
+
+application = get_asgi_application()
+
+startup.run()
+# set DJANGO_LOADED so that startup knows, only to run some stuff once on autoreload in develop
+os.environ["DJANGO_LOADED"] = "true"

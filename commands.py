@@ -1,0 +1,548 @@
+#!/usr/bin/env python3
+
+"""Typer cli interface to manage the dev-environment"""
+
+import os
+import subprocess
+
+# tui: import sys
+import webbrowser
+from datetime import datetime
+from pathlib import Path
+from typing import Optional
+
+import typer
+from environs import Env
+
+# from config.settings.base import ROOT_DIR
+# from config.settings.base.databases import define_databases
+# from config.settings.environment.setup import read_environment
+#from core.decorators import djangosetup
+
+
+try:
+    from rich import print  # pylint: disable=redefined-builtin
+except ImportError:
+    # if rich is not installed, use the default print
+    # avoid linter warning for undefined print
+    print = print  # pylint: disable=self-assigning-variable
+
+cli = typer.Typer(rich_markup_mode=None)
+
+
+# --------- CONFIG -------------------------------------------------------------
+DEBUG = True
+CWD = Path(__file__).parent
+MANAGE = "python manage.py"
+TEMPLATE = "https://example.com"
+
+
+# --------- HELPERS -----------------------------------------------------------
+def env_with_pythonpath(environment: dict | None = None):
+    """Get en environment dict with includes PYTHONPATH"""
+    env = os.environ.copy()
+    wd = str(CWD.resolve())
+    if wd not in env["PATH"]:
+        env["PATH"] += wd
+    if environment is not None:
+        env |= environment
+    return env
+
+
+def clean_build(panic: bool = True, log_errors: bool = True):
+    from core.inout.directories import delete_tree  # pylint: disable=import-outside-toplevel
+
+    cwd = Path(CWD)
+
+    print("Unlinking build-files: build/; dist/ *.egg-info; __pycache__;")
+    _ = [delete_tree(p, panic=panic, log_errors=log_errors) for p in cwd.rglob("build")]
+    _ = [delete_tree(p, panic=panic, log_errors=log_errors) for p in cwd.rglob("*.egg-info")]
+    _ = [delete_tree(p, panic=panic, log_errors=log_errors) for p in cwd.rglob("__pycache__")]
+    _ = [delete_tree(p, panic=panic, log_errors=log_errors) for p in cwd.rglob(".ruff_cache")]
+    _ = [delete_tree(p, panic=panic, log_errors=log_errors) for p in cwd.rglob(".mypy_cache")]
+    _ = [delete_tree(p, panic=panic, log_errors=log_errors) for p in cwd.rglob("dist")]
+
+
+def clean_temp(panic: bool = True, log_errors: bool = True):
+    from core.inout.directories import delete_tree  # pylint: disable=import-outside-toplevel
+
+    print("Unlinking temp-files: temp/")
+    # ! keep the parent folder
+    delete_tree(Path(CWD) / "temp", keep_parent=True, panic=panic, log_errors=log_errors)
+
+
+def clean_pyc(panic: bool = True, log_errors: bool = True):
+    from core.inout.files import unlink  # pylint: disable=import-outside-toplevel
+
+    print("Unlinking caches: *.pyc; *pyo; *~;")
+    _ = [unlink(p, panic=panic, log_errors=log_errors) for p in Path(CWD).rglob("*.py[co]")]
+    _ = [unlink(p, panic=panic, log_errors=log_errors) for p in Path(CWD).rglob("*~")]
+
+
+def clean_logs(panic: bool = True, log_errors: bool = True, clean_frozen: bool = False, freezeas: str = "frozen"):
+    from core.inout.files import unlink  # pylint: disable=import-outside-toplevel
+
+    print("Unlinking logs: logs/*")
+
+    for path in (Path(CWD) / "logs").rglob("*"):
+        if path.name.startswith(freezeas) and not clean_frozen:
+            continue
+        # freeze the historic instance of the logfile
+        if not clean_frozen:
+            dest = (
+                Path(CWD)
+                / "logs"
+                / f"{freezeas}-{path.stem}_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}{path.suffix}"
+            )
+            dest.write_text(path.read_text())
+        # delete the original
+        unlink(path, panic=panic, log_errors=log_errors)
+
+# Added by blaise
+def clean_all(panic: bool = True, log_errors: bool = True):
+    """Helper function to clean everything"""
+    temp_log_errors_and_panic = False
+    clean_temp(panic=temp_log_errors_and_panic, log_errors=temp_log_errors_and_panic)
+    clean_build(panic=panic, log_errors=log_errors)
+    clean_pyc(panic=panic, log_errors=log_errors)
+    clean_logs(panic=panic, log_errors=log_errors)
+
+def create_vital_files_and_directories(production: bool = False):
+    print("Creating vital files and directories.")
+
+    # directories
+    assets = CWD / "assets"
+    database = CWD / "database"
+    logs = CWD / "logs"
+    media = CWD / "media"
+    temp = CWD / "temp"
+
+    if not production:
+        # files
+        production_dotenv = CWD / "envs" / "production.env"
+        local_dotenv = CWD / "envs" / "local.env"
+        _ = [
+            path.touch(exist_ok=True) for path in (production_dotenv, local_dotenv)  # type: ignore[func-returns-value]
+        ]
+
+    _ = [
+        path.mkdir(parents=True, exist_ok=True)  # type: ignore[func-returns-value]
+        for path in (logs, media, assets, database, temp)
+    ]
+
+
+def run_command(command, debug=False, cwd=CWD, env=env_with_pythonpath(), shell=True):
+    """
+    Run a command in a subprocess.
+
+    If debug is True, print the command before running it.
+    cwd is the working directory for the command.
+    env is the os environment for the command.
+    If shell is True it will run the command with the venv.
+    """
+    if debug:
+        print(f">>> Running command: {command}")
+    try:
+        subprocess.run(command.split(), cwd=cwd, env=env, shell=shell, check=True)
+    except FileNotFoundError:
+        print(f"The command {command} threw a FileNotFoundError")
+
+
+def rename_file_suffix(path: Path, new_suffix: str):
+    return path.rename(path.with_suffix(new_suffix))
+
+
+def walk_rename(source: str = "", target: str = "", directory: Path = CWD):
+    """
+    Walks through a directory recursively and renames all files with a given
+    extension to another extension.
+    """
+    renamed = []
+    source = ".py" if source == "" else source
+    target = ".py-tpl" if target == "" else target
+
+    for path in directory.iterdir():
+        if path.is_dir():
+            renamed += walk_rename(source=source, target=target, directory=path)
+        elif path.is_file() and path.suffix == source and path != Path(__file__):
+            renamed.append(rename_file_suffix(path=path, new_suffix=target))
+
+    return renamed
+
+
+def formatcode(templates: bool = False):
+    """
+    # rename step 1: all py-tpl to py to format them, remember their path
+    # rename step 2: all py to py-tpl to commit them again
+    """
+    renamed = []
+    if templates:
+        renamed = walk_rename(source=".py-tpl", target=".py", directory=CWD)
+
+    command = "black ."
+    run_command(command, debug=DEBUG)
+    command = "isort ."
+    run_command(command, debug=DEBUG)
+    command = "flake8"
+    run_command(command, debug=DEBUG)
+    command = "mypy ."
+    run_command(command, debug=DEBUG)
+    command = "ruff check ."
+    run_command(command, debug=DEBUG)
+
+    if templates:
+        for path in renamed:
+            rename_file_suffix(path=path, new_suffix=".py-tpl")
+
+
+def get_commithash(*, repository: str) -> str:
+    # from core.gitops import clone_and_get_latest_commit_hash  # pylint: disable=import-outside-toplevel
+
+    # return clone_and_get_latest_commit_hash(repository_url=repository)
+    ...
+
+
+def write_info_to_pyproject_toml(path: Path):
+    # lazy import
+    from core.pyproject import (  # pylint: disable=import-outside-toplevel
+        initialize_template_section_to_pyproject,
+        PyProjectHasBeenSetupBeforeException,
+    )
+
+    try:
+        initialize_template_section_to_pyproject(
+            project_root_path=path,
+            template_repository_url=TEMPLATE,
+            template_commit_hash=get_commithash(repository=TEMPLATE),
+        )
+    except PyProjectHasBeenSetupBeforeException as e:
+        print(f"Pyproject.toml template information has already been setup before. {e}")
+
+
+def _version_callback(value: bool) -> None:
+    if value:
+        from core.pyproject import load_pyproject  # pylint: disable=import-outside-toplevel
+
+        pyproject = load_pyproject(project_path=CWD)
+        title = pyproject.tool["poetry"]["name"]
+        version = pyproject.tool["poetry"]["version"]
+        print(f"{title} version={version}")
+        raise typer.Exit()
+
+
+----------GENERAL COMMANDS----------------------------------------------------
+@cli.callback(no_args_is_help=True)
+def default(
+    version: Optional[bool] = typer.Option(  # pylint: disable=unused-argument
+        # BUG: replace Optional with bool | None, when a typer release merges
+        # the pull request for modern Typehints -> also re-activate
+        # pre-commit-hook 'pyupgrade', that is currently deactivated bedause of
+        # this bug.
+        None,
+        "--version",
+        #"-v",
+        help="Show the application's version and exit.",
+        callback=_version_callback,
+        is_eager=True,
+    )
+) -> None:
+    return
+
+
+@cli.command()
+def clean(
+    panic: bool = typer.Option(True, help="Enable panic mode"),
+    log_errors: bool = typer.Option(True, help="Enable error logging")
+):
+    """Cleaning pycache, buildfiles, logfiles"""
+    temp_log_errors_and_panic = False  # BUG: don't log errors when cleaning temp, git has a bug here
+    clean_temp(panic=temp_log_errors_and_panic, log_errors=temp_log_errors_and_panic)
+    clean_build(panic=panic, log_errors=log_errors)
+    clean_pyc(panic=panic, log_errors=log_errors)
+    clean_logs(panic=panic, log_errors=log_errors)
+
+
+@cli.command()
+def check(templates: bool = typer.Option(False, help="Format templates")):
+    """Format & check the code"""
+    formatcode(templates=templates)
+
+
+@cli.command()
+def doppler():
+    """download the dotenvs from doppler.com (test + dev) - if your are logged in"""
+    raise NotImplementedError("Doppler is not yet implemented via cc.")
+
+
+@cli.command()
+def celery(
+    mode: str = typer.Option("develop", help="Django mode"),
+    config: str = typer.Option("config.celeryapp", help="Celery config"),
+    worker: bool = typer.Option(False, "--worker", help="Run celery worker"),
+    beat: bool = typer.Option(False, "--beat", help="Run celery beat"),
+    flower: bool = typer.Option(False, "--flower", help="Run flower"),
+):
+    """Run the celery worker"""
+    counts = int(worker) + int(beat) + int(flower)
+    if counts > 1:
+        print("Running celery worker, flower or beat over this interface is mutually exclusive.")
+        raise typer.Abort()
+    elif counts < 1:
+        print("Please run at least one of --worker --beat --flower.")
+        raise typer.Abort()
+
+    env: Env = read_environment(env=Env(), path=ROOT_DIR / "envs" / f"{mode}.env")
+    _env = env_with_pythonpath(environment=dict(env.dump()))
+
+    if worker:
+        # run celery worker
+        command = " ".join(
+            [
+                "celery",
+                f"--app {config}",
+                "worker",
+                "--loglevel=INFO",
+                "--queues celery,pytomatom",
+                " --hostname worker-%%h",
+            ]
+        )
+
+        if os.name == "nt":
+            # windows does not support event loops via gevent and eventlet,
+            # because the posix implementation for functions like select, poll,
+            # epoll and pipe differs.
+            command += " --pool solo"
+
+        run_command(command, debug=DEBUG, env=_env)
+
+    if beat:
+        # run celery beat
+        command = f"celery --app {config} beat"
+        run_command(command, debug=DEBUG, env=_env)
+
+    if flower:
+        dbenv = define_databases(env=env)
+        command = f"celery --broker={dbenv['REDIS_URL']} flower --app={config}"
+        run_command(command, debug=DEBUG, env=_env)
+
+
+@cli.command()
+def setup(
+    production: bool = False,
+    panic: bool = False,
+    log_errors: bool = False
+):
+    """
+    Setup the project.
+    Clean.
+    Create vital files and directories.
+    if not in production:
+        Write template and commithash info to pyproject.toml.
+        Start the TUI Configapp.
+    """
+    create_vital_files_and_directories(production=production)
+    clean_all(panic=panic, log_errors=log_errors)
+    if not production:
+        write_info_to_pyproject_toml(path=CWD)
+
+
+@cli.command()
+@djangosetup
+def cherry():
+    """Cherry pick changes from the template repository."""
+    # lazy import
+    from core.pyproject import cherry_pick  # pylint: disable=import-outside-toplevel
+
+    print("Cherry picking changes from the template repository. [red]This may take a while.[/red]")
+    cherry_pick(pyproject_path=CWD)
+
+
+---------- INTROSPECTION ----------------------------------------------------
+@cli.command()
+def readme():
+    """README"""
+    with open("README.md", encoding="utf-8") as file:
+        content = file.read()
+    try:
+        from rich.markdown import Markdown  # pylint: disable=import-outside-toplevel
+    except ImportError:
+        print("Install rich to render README.md as markdown.")
+        print(content)
+    else:
+        markdown = Markdown(content)
+        print(markdown)
+
+
+---------- MANAGE THE DATABASE AND OTHER COMMANDS ---------------------------
+@cli.command()
+def makemigrations():
+    """
+    Django Makemigrations .
+    """
+    command = f"{MANAGE} makemigrations"
+    run_command(command, debug=DEBUG)
+
+
+@cli.command()
+def migrate():
+    """
+    Django Migrate.
+    """
+    command = f"{MANAGE} migrate"
+    run_command(command, debug=DEBUG)
+
+
+@cli.command()
+def collectstatic():
+    command = f"{MANAGE} collectstatic --noinput --clear --verbosity 0"
+    print("Collecting static files and clearing the old clutter.. ")
+    run_command(command, debug=DEBUG)
+    print("Staticfiles collected.")
+
+
+---------- SERVER -----------------------------------------------------------
+@cli.command()
+def run():
+    """
+    Run the dev server.
+    """
+    command = f"{MANAGE} runserver"
+    run_command(command, debug=DEBUG)
+
+
+@cli.command()
+def notebook():
+    """
+    Run the notebook server.
+    """
+    command = f"{MANAGE} shell_plus --notebook"
+    run_command(command, debug=DEBUG)
+
+
+---------- TESTS ------------------------------------------------------------
+@cli.command()
+def test():
+    command = "python -m pytest"
+    run_command(command, debug=DEBUG)
+
+
+@cli.command()
+def coverage():
+    """
+    Run and show coverage.
+    """
+    commands = [
+        "coverage run --module pytest",
+        "coverage report -mi",
+        "coverage html",
+    ]
+    for command in commands:
+        run_command(command, debug=DEBUG)
+    coverage_index_file_url = f'file://{(CWD / "htmlcov" / "index.html").resolve()}'
+    webbrowser.open_new_tab(coverage_index_file_url)
+
+
+ ---------- ABBREVIATIONS ----------------------------------------------------
+@cli.command()
+def mm():
+    """= makemigrations"""
+    makemigrations()
+
+
+@cli.command()
+def mig():
+    """= migrate"""
+    migrate()
+
+
+@cli.command()
+def mmm():
+    """= makemigrations + migrate"""
+    makemigrations()
+    migrate()
+
+
+@cli.command()
+def nb():
+    """= notebook (start the notebook server)"""
+    notebook()
+
+
+@cli.command()
+def up():
+    """= run (start the devserver)"""
+    run()
+
+
+@cli.command()
+def init():
+    """= setup (setup the project for development)
+    Clean.
+    Create vital files and directories.
+    Write template and commithash info to pyproject.toml.
+    """
+    setup()
+
+
+---------- DEV ----------------------------------------------------------
+@cli.command()
+def createtestuser(email: str = typer.Option("test@saint-gobain.com", help="User email")):
+    """
+    Create test user.
+    """
+    import os
+    import warnings
+
+    from django.contrib.auth import get_user_model
+    from django.core.exceptions import ValidationError
+    from django.core.validators import validate_email
+    from django.db import IntegrityError
+
+    from core.setup import setup_django_settings
+
+    if os.environ.get("DJANGO_SETTINGS_MODULE") == "config.settings.production":
+        warnings.warn("This command shall only be available in development environments.")
+        return
+
+    setup_django_settings(mode="develop")
+
+    UserModel = get_user_model()  # NOSONAR
+    password = "test"
+
+    try:
+        validate_email(email)
+    except ValidationError:
+        print("Invalid email address.")
+        return
+
+    user = UserModel(email=email, is_active=True)
+    user.set_password(password)
+
+    try:
+        user.save()
+    except IntegrityError as exc:
+        print("User does already exist?", exc)
+        return
+
+    print(f"Created user {email=} {password=}.")
+
+
+---------- LINTING ----------------------------------------------------------
+@cli.command()
+def black(path: str = typer.Argument(default=None, help="Path to format")):
+    """black <path>"""
+    command = "black"
+    if path is not None:
+        command = f"{command} {path}"
+    run_command(command, debug=DEBUG)
+
+
+@cli.command()
+def mypy():
+    """Run Mypy (configured in pyproject.toml)"""
+    command = "mypy ."
+    run_command(command)
+
+
+if __name__ == "__main__":
+    cli()

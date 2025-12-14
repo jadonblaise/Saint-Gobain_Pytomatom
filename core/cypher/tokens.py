@@ -1,0 +1,111 @@
+import secrets
+from datetime import timedelta, datetime
+from typing import Literal, TypeAlias
+
+from jose import jwt
+
+from django.conf import settings
+
+
+DEFAULT_JWT_TOKEN_ALGORITHM = "HS512"
+DEFAULT_JWT_TOKEN_ACCESS_EXPIRATION_MINUTES = 5  # 5 minutes
+DEFAULT_JWT_TOKEN_REFRESH_EXPIRATION_MINUTES = 60 * 24 * 7  # 7 days
+DEFAULT_JWT_TOKEN_PREFIX = "Bearer"
+DEFAULT_JWT_TOKEN_TYPE = "jwt"
+DEFAULT_JWT_TOKEN_COOKIE_KEY = "Authentication"
+
+
+JWTTokenType: TypeAlias = Literal["access", "refresh", "unique"]
+
+
+class JWTAccessToken(str):
+    """
+    String representation of the header, claims, and signature.
+    Signed with DEFAULT_JWT_TOKEN_ALGORITHM.
+    """
+
+    @classmethod
+    def __get_validators__(cls):
+        yield cls.validate
+
+    @classmethod
+    def validate(cls, access_token: str):
+        """
+        Validation. Used by pydantic to validate the access_token string.
+        """
+        if not isinstance(access_token, str):
+            raise TypeError("Can only proecess access_token strings")
+        # To keep type-annotations exact, return a JWTAccessToken instance
+        return cls(access_token)
+
+
+def urlsafe_token(nbytes: int = 66):
+    """Generate a random urlsafe secret key."""
+    return secrets.token_urlsafe(nbytes)
+
+
+def jwt_token(
+    email: str,
+    now: datetime,
+    expires_in: int,
+    scope: str = "",
+    audience: str = "",
+    signature: str = "",
+    tokentype: JWTTokenType = "unique",
+) -> JWTAccessToken:
+    """
+    Generate a random jwt token.
+
+    now:
+        datetime object -> the current time. Should be instantiated before the
+        call, because it should be the same for all tokens. (django.utils.timezone.now())
+
+    expires_in: in minutes
+        recommended:
+            access token:  5       minutes
+            refresh token: 60*24*7 minutes (a week)
+
+    scope:
+        The value of the "scope" claim is a JSON string containing a
+        space-separated list of scopes associated with the token...
+        https://datatracker.ietf.org/doc/html/rfc8693#name-scope-scopes-claim
+
+    audience:
+        The logical name of the target service where the client intends to use
+        the requested security token.
+
+    """
+    if signature == "":
+        signature = urlsafe_token(8)
+    claims = {
+        "iss": settings.PROJECT_FQDN,
+        "exp": now + timedelta(minutes=expires_in),
+        "sub": email,
+        "iat": now,
+        "signature": signature,
+        "type": tokentype,
+        "zoneinfo": settings.TIME_ZONE,
+    }
+    if scope:
+        claims["scope"] = scope
+    if audience:
+        claims["aud"] = audience
+    headers = {
+        "alg": DEFAULT_JWT_TOKEN_ALGORITHM,
+        "typ": DEFAULT_JWT_TOKEN_TYPE,
+    }
+    return JWTAccessToken(
+        jwt.encode(claims=claims, key=settings.SECRET_KEY, algorithm=DEFAULT_JWT_TOKEN_ALGORITHM, headers=headers)
+    )
+
+
+def insecure_decode_jwt_token(token: str, force: bool = False) -> dict:
+    """
+    Decode a jwt token ignoring all errors.
+    """
+    if not force:
+        raise ValueError("A call to this function shall be forced explicitly!")
+    payload = jwt.decode(
+        token, key=settings.SECRET_KEY, algorithms=[DEFAULT_JWT_TOKEN_ALGORITHM], options={"verify_signature": False}
+    )
+    return payload

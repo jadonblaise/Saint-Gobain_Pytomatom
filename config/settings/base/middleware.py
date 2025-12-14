@@ -1,0 +1,18 @@
+# -- Modular settings ---------------------------------------------------------
+# These settings are imported in the __init__.py of the base directory explicitly.
+# To add a new setting, also edit the __init__.py
+# -----------------------------------------------------------------------------
+MIDDLEWARE = [  # ! order is important: https://docs.djangoproject.com/en/4.1/ref/middleware/#middleware-ordering
+    "django.middleware.security.SecurityMiddleware",
+    "django_permissions_policy.PermissionsPolicyMiddleware",
+    "django.contrib.sessions.middleware.SessionMiddleware",
+    # corsheaders middleware
+    "corsheaders.middleware.CorsMiddleware",
+    # django-csp content-security-policy middleware
+    "csp.middleware.CSPMiddleware",
+    "django.middleware.common.CommonMiddleware",
+    "django.middleware.csrf.CsrfViewMiddleware",
+    "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "django.contrib.messages.middleware.MessageMiddleware",
+    "django.middleware.clickjacking.XFrameOptionsMiddleware",
+]

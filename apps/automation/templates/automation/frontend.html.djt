@@ -1,0 +1,137 @@
+{% extends 'automation/base.html.djt' %}
+
+{% block header %}
+  <script src="https://cdn.tailwindcss.com"></script>
+{% endblock %}
+
+{% block content %}
+
+<h1 class="text-3xl font-bold text-cyan-500">{{ django_message }}</h1>
+
+
+<div class="flex justify-center">
+  <form method="post" action="{% url 'orderbooks:automation-download' %}" enctype="multipart/form-data" class="max-w-md mx-auto bg-white p-8 rounded-md shadow-md">
+    {% csrf_token %}
+
+    <table class="table-auto w-full">
+      <thead>
+        <tr>
+          <th class="text-left text-gray-700 font-medium py-2">File</th>
+          <th class="text-left font-medium text-gray-700 py-2">Upload</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="border px-4 py-2">New orders</td>
+          <td class="border px-4 py-2">
+            <input type="file" id="new_orders" name="new_orders" class="border rounded-md p-2 w-full" accept=".xlsx">
+          </td>
+        </tr>
+        <tr>
+          <td class="border px-4 py-2">Old orders</td>
+          <td class="border px-4 py-2">
+            <input type="file" id="old_orders" name="old_orders" class="border rounded-md p-2 w-full" accept=".xlsx">
+          </td>
+        </tr>
+        <tr>
+          <td class="border px-4 py-2">Orion raw</td>
+          <td class="border px-4 py-2">
+            <input type="file" id="orion_raw" name="orion_raw" class="border rounded-md p-2 w-full" accept=".xlsx">
+          </td>
+        </tr>
+        <tr>
+          <td class="border px-4 py-2">Article ginger</td>
+          <td class="border px-4 py-2">
+            <input type="file" id="article_ginger" name="article_ginger" class="border rounded-md p-2 w-full" accept=".xlsx">
+          </td>
+        </tr>
+        <tr>
+          <td class="border px-4 py-2">Float plan</td>
+          <td class="border px-4 py-2">
+            <input type="file" id="float_plan" name="float_plan" class="border rounded-md p-2 w-full" accept=".xlsx">
+          </td>
+        </tr>
+        <tr>
+          <td class="border px-4 py-2">Coater plan</td>
+          <td class="border px-4 py-2">
+            <input type="file" id="coater_plan" name="coater_plan" class="border rounded-md p-2 w-full" accept=".xlsx">
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="bg-blue-500 hover:bg-blue-600 text-white rounded-md py-2 px-4 mt-4 block mx-auto">
+      <button type="submit">Automate, predict and Download</button>
+    </div>
+  </form>
+</div>
+
+
+
+
+<div class="flex justify-center">
+  <form method="post" action="{% url 'demandforecast:automation-download' %}" enctype="multipart/form-data" class="max-w-md mx-auto bg-white p-8 rounded-md shadow-md">
+    {% csrf_token %}
+
+    <table class="table-auto w-full">
+      <thead>
+        <tr>
+          <th class="text-left text-gray-700 font-medium py-2">File</th>
+          <th class="text-left font-medium text-gray-700 py-2">Upload</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="border px-4 py-2">Reference Data</td>
+          <td class="border px-4 py-2">
+            <input type="file" id="reference_data" name="reference_data" class="border rounded-md p-2 w-full" accept=".xlsx">
+          </td>
+        </tr>
+        <tr>
+          <td class="border px-4 py-2">LG Codes</td>
+          <td class="border px-4 py-2">
+            <input type="file" id="lg_codes" name="lg_codes" class="border rounded-md p-2 w-full" accept=".xlsx">
+          </td>
+        </tr>
+        <tr>
+          <td class="border px-4 py-2">Dach forecast</td>
+          <td class="border px-4 py-2">
+            <input type="file" id="dach_forecast" name="dach_forecast" class="border rounded-md p-2 w-full" accept=".csv">
+          </td>
+        </tr>
+        <tr>
+          <td class="border px-4 py-2">Microstrategy</td>
+          <td class="border px-4 py-2">
+            <input type="file" id="microstrategy" name="microstrategy" class="border rounded-md p-2 w-full" accept=".xlsx">
+          </td>
+        </tr>
+        <tr>
+          <td class="border px-4 py-2">Shipping Plants</td>
+          <td class="border px-4 py-2">
+            <input type="file" id="shipping_plants" name="shipping_plants" class="border rounded-md p-2 w-full" accept=".xlsx">
+          </td>
+        </tr>
+        <tr>
+          <td class="border px-4 py-2">Cessions of Customers</td>
+          <td class="border px-4 py-2">
+            <input type="file" id="cessions" name="cessions" class="border rounded-md p-2 w-full" accept=".xlsx">
+          </td>
+        </tr>
+        <tr>
+          <td class="border px-4 py-2">Output as SAP-Upload</td>
+          <td class="border px-4 py-2">
+            <input type="checkbox" id="as_sap_upload" name="divergence" value="as_sap_upload" class="border rounded-md p-2 w-full">
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="bg-blue-500 hover:bg-blue-600 text-white rounded-md py-2 px-4 mt-4 block mx-auto">
+      <button type="submit">Demand Forecast</button>
+    </div>
+  </form>
+</div>
+
+
+
+{% endblock %}

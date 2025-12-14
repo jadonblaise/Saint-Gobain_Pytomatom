@@ -1,0 +1,81 @@
+import base64
+import hashlib
+import secrets
+import string
+from pathlib import Path
+
+from ..inout.files import read_from_disk
+
+
+# Chars not allowed in django secret keys.
+DJANGO_SECRET_CHARS_EXCLUDE = "<[?}].`\\/'>:|{\";,~"
+# Chars not allowed in common secret keys (web, dotenv and postgres compatibility).
+COMMON_SECRET_CHARS_EXCLUDE = "*=()$%^"
+
+
+def random_sequence(*, alphabet: str, length: int) -> str:
+    """
+    Generate a random sequence from some characters with length.
+    """
+    MAXIMUM_LENGTH = 1000
+    if length < 1:
+        raise ValueError("Length must be positive-nonzero.")
+    if length > MAXIMUM_LENGTH:
+        raise ValueError(f"Length must be less than {MAXIMUM_LENGTH=}.")
+    if not alphabet:
+        raise ValueError("No characters provided.")
+    if len(alphabet) > MAXIMUM_LENGTH:
+        raise ValueError(f"Length of the alphabet {len(alphabet)=} must be less than {MAXIMUM_LENGTH=}.")
+    return "".join(secrets.choice(alphabet) for _ in range(length))
+
+
+def sequence(
+    *,
+    use_lowercase_letters: bool = True,
+    use_uppercase_letters: bool = True,
+    use_digits: bool = True,
+    use_punctuation: bool = True,
+    exclude: str = DJANGO_SECRET_CHARS_EXCLUDE + COMMON_SECRET_CHARS_EXCLUDE,
+    length: int = 99,
+) -> str:
+    """Generate a random sequence."""
+    alphabet = ""
+    if use_lowercase_letters:
+        alphabet += string.ascii_lowercase
+    if use_uppercase_letters:
+        alphabet += string.ascii_uppercase
+    if use_digits:
+        alphabet += string.digits
+    if use_punctuation:
+        alphabet += string.punctuation
+    alphabet = "".join(sorted(set(alphabet) - set(exclude)))
+    return random_sequence(alphabet=alphabet, length=length)
+
+
+def sha256(encoded: bytes) -> bytes:
+    """SHA-256 hash for some bytes."""
+    return hashlib.sha256(encoded).digest()
+
+
+def hex_sha256(encoded: bytes) -> str:
+    """SHA-256 hash HEX digest (:32)."""
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def b64(hashed: bytes) -> bytes:
+    """base64 encoded SHA-256 hash for some bytes."""
+    return base64.b64encode(hashed)
+
+
+def hashme(file: Path, hexme: bool = False) -> str:
+    """Generate SHA-256 based hash.
+
+    hexme:
+        hex-digest or base64 (default)
+
+    Always read content as bytes to avoid read errors ["UnicodeDecodeError", ...]
+    """
+    content: bytes = read_from_disk(file, mode="rb")  # type: ignore  # rb mode will always return bytes
+    if hexme is True:
+        return hex_sha256(content)
+    return b64(sha256(content)).decode()

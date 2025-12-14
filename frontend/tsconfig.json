@@ -1,0 +1,88 @@
+{
+  // "extends": "@vue/tsconfig/tsconfig.web.json",
+  // https://www.typescriptlang.org/docs/handbook/compiler-options.html?
+  "compilerOptions": {
+    "outDir": "dist",
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "nodenext",
+    "lib": [
+      // https://www.typescriptlang.org/tsconfig/#lib
+      "ESNext",
+      "DOM",
+      "DOM.Iterable",
+    ],
+    "useDefineForClassFields": true,
+
+    /* Bundler mode */
+    "jsx": "preserve",
+    "removeComments": true,  // to reduce file-size
+    "isolatedModules": true,  // https://vitejs.dev/guide/features.html#typescript-compiler-options
+    // FIXME - in combination with isolatedModules: true && vue skip the
+    // lib-check (until this might be fixed in vue itself)
+    "skipLibCheck": true,
+
+    /* Linting */
+    "strict": true,
+    "declaration": true,
+    "noUnusedLocals": false,  // otherwise template-refs are marked as unused
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    // "noImplicitAny": true,  // if true it's included in 'strict' already
+    "noImplicitOverride": true,
+    "noImplicitThis": false,
+    /* Experimental Options:
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    */
+
+    "sourceMap": true, // mandatory to apply the debugger
+    "resolveJsonModule": true,
+    "esModuleInterop": false, // TypeScript treats CommonJS/AMD/UMD modules similar to ES6 modules. Which leads to:
+    // states that a namespace import (import * as x) can only be an object, by having TypeScript treating it the same
+    // as = require("x") then TypeScript allowed for the import to be treated as a function and be callable. That’s not
+    // valid according to the spec. But: we still need to set this to false, otherwise our build will crash on a lot of
+    // external modules.
+    // ==> this also leads to allowSyntheticDefaultImports being set to true
+    "allowSyntheticDefaultImports": true,
+
+    "baseUrl": ".",
+    "paths": {
+      "@/*": [
+        "./src/*",
+        "./dist/*",
+      ],
+      // "components/*": [
+      //   "src/components/*"
+      // ],
+      // "pages/*": ["src/pages/*"],
+    },
+    // "typeRoots": ["@types", "node_modules/@types"],
+    // "types": [
+    //   "vite/client",
+    //   "node",
+    // ],
+
+  },
+  "plugins": [
+    // "typescript-plugin-vue",
+  ],
+  "include": [
+    // "env.d.ts",
+    "@types/**/*",
+    // "src/**/*",
+    "src/**/*.ts",
+    "src/**/*.d.ts",
+    "src/**/*.vue",
+    // ".eslintrc.cjs",
+    "index.html",
+    "postcss.config.js",
+    "tailwind.config.ts",
+    "vite.config.js"
+  ],
+  "exclude": [
+    "node_modules",
+    "**/*.spec.ts"
+  ],
+  "references": [{ "path": "./tsconfig.vite.json" }]
+}

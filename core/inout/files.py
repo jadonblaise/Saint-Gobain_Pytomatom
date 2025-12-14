@@ -1,0 +1,160 @@
+import logging
+from pathlib import Path
+from typing import Literal
+
+import jinja2
+
+from config.settings.base.logging import LogGuardConfig
+
+from ..exceptions import guard
+from ..exceptions.io import CoreIOException
+from . import IO_LOGGER
+
+
+log = logging.getLogger(IO_LOGGER)
+
+
+def read_from_disk(
+    path: Path, panic: bool = True, log_errors: bool = True, mode: Literal["r", "rb"] = "r", encoding: str = "utf-8"
+) -> str | bytes:
+    """
+    Read from a file.
+    Return the content of the file as a string or bytes.
+    Return an empty string or empty bytes if the file does not exist or if an error occurred.
+    - or of course: if the file is empty.
+    """
+
+    empty: str | bytes = "" if mode == "r" else bytes()
+    log_config = LogGuardConfig(logger_name=IO_LOGGER, log_errors=log_errors)
+
+    if not isinstance(path, Path):
+        guard.exception(exc=TypeError(f"Invalid type for path: {type(path)=}"), panic=panic, log_config=log_config)
+        return empty
+
+    if not path.exists():
+        guard.exception(exc=FileNotFoundError(f"{path} does not exist."), panic=panic, log_config=log_config)
+        return empty
+
+    if not path.is_file():
+        guard.exception(exc=ValueError(f"{path} is not a file."), panic=panic, log_config=log_config)
+        return empty
+
+    try:
+        kwargs = {"mode": mode, "encoding": encoding} if mode == "r" else {"mode": mode}
+        with open(path, **kwargs) as file:  # type: ignore[call-overload]
+            content = file.read()
+        log.debug(f"INOUT.FILES.READ {len(content)=} {path=}", extra={"content": content, "path": path})
+        return content
+    except PermissionError as exception:
+        exc = CoreIOException("A permission error occurred while reading the file.", parent=exception)
+        guard.exception(exc=exc, panic=panic, log_config=log_config)
+    except OSError as exception:
+        exc = CoreIOException("An OS error occurred while reading the file.", parent=exception)
+        guard.exception(exc=exc, panic=panic, log_config=log_config)
+    except Exception as exception:  # pylint: disable=broad-exception-caught
+        exc = CoreIOException("An unexpected error occurred.", parent=exception)
+        guard.exception(exc=exc, panic=panic, log_config=log_config)
+    return empty
+
+
+def write_to_disk(
+    path: Path,
+    content: str | bytes,
+    panic: bool = True,
+    log_errors: bool = True,
+    encoding: str = "utf-8",
+) -> bool:
+    """
+    Write to a file.
+
+    returns "success" True if the file was written successfully, False otherwise.
+    """
+    success: bool = False
+    log_config = LogGuardConfig(logger_name=IO_LOGGER, log_errors=log_errors)
+    content_type = type(content)
+
+    if content_type is not bytes and content_type is not str:
+        guard.exception(
+            exc=TypeError(f"Content must be a string or bytes, not {content_type}"), panic=panic, log_config=log_config
+        )
+        return success
+
+    if not isinstance(path, Path):
+        guard.exception(exc=TypeError(f"Invalid type for path: {type(path)=}"), panic=panic, log_config=log_config)
+        return success
+
+    mode = "w" if content_type is str else "wb"
+    kwargs = {"mode": mode, "encoding": encoding} if content_type is str else {"mode": mode}  # can't encode bytes
+    try:
+        with open(file=path, **kwargs) as file:  # type: ignore[call-overload]
+            log.debug(f"INOUT.FILES.WRITE {len(content)=} {path=}", extra={"content": content, "path": path})
+            file.write(content)
+            success = True
+    # ! any error may truncate the file
+    except PermissionError as exception:
+        exc = CoreIOException("A permission error occurred while writing the file.", parent=exception)
+        guard.exception(exc=exc, panic=panic, log_config=log_config)
+    except OSError as exception:
+        exc = CoreIOException("An OS error occurred while writing the file.", parent=exception)
+        guard.exception(exc=exc, panic=panic, log_config=log_config)
+    except Exception as exception:  # pylint: disable=broad-exception-caught
+        exc = CoreIOException("An unexpected error occurred while writing the file.", parent=exception)
+        guard.exception(exc=exc, panic=panic, log_config=log_config)
+    return success
+
+
+def unlink(path: Path, panic: bool = True, log_errors: bool = True) -> bool:
+    """Delete a file."""
+    success = False
+    log_config = LogGuardConfig(logger_name=IO_LOGGER, log_errors=log_errors)
+
+    if not isinstance(path, Path):
+        guard.exception(exc=TypeError(f"Invalid type for path: {type(path)=}"), panic=panic, log_config=log_config)
+        return success
+
+    try:
+        path.unlink()
+        success = True
+    except PermissionError as exception:
+        exc = CoreIOException("A permission error occurred while deleting the file.", parent=exception)
+        guard.exception(exc=exc, panic=panic, log_config=log_config)
+    except OSError as exception:
+        exc = CoreIOException("An OS error occurred while deleting the file.", parent=exception)
+        guard.exception(exc=exc, panic=panic, log_config=log_config)
+    except Exception as exception:  # pylint: disable=broad-exception-caught
+        exc = CoreIOException("An unexpected error occurred while deleting the file.", parent=exception)
+        guard.exception(exc=exc, panic=panic, log_config=log_config)
+    return success
+
+
+def jinja_replace_context(
+    *,
+    path: Path,
+    context: dict,
+    panic: bool = True,
+    log_errors: bool = True,
+):
+    success = False
+    log_config = LogGuardConfig(logger_name=IO_LOGGER, log_errors=log_errors)
+
+    if not isinstance(path, Path):
+        guard.exception(exc=TypeError(f"Invalid type for path: {type(path)=}"), panic=panic, log_config=log_config)
+        return success
+
+    # will always return a string
+    content: str = read_from_disk(path=path, mode="r", panic=panic, log_errors=log_errors)  # type: ignore[assignment]
+    if any([key in content for key in context.keys()]):
+        # Build & render the context into jinja-like templates
+        filesystem_loader = jinja2.FileSystemLoader(searchpath=path.parent, encoding="utf-8")
+        jinja_env = jinja2.Environment(loader=filesystem_loader)
+        try:
+            compiled_template = jinja_env.from_string(source=content)
+            rendered = compiled_template.render(**context)
+        except jinja2.TemplateSyntaxError:
+            return success
+
+        # Write the rendered template back to disk
+        return write_to_disk(path=path, content=rendered, panic=panic, log_errors=log_errors)
+
+    success = True
+    return success

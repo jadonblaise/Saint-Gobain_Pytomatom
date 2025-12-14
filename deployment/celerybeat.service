@@ -1,0 +1,35 @@
+# celerybeat.service
+#
+# For spawning a web application celery task manager as a systemd service.
+#
+[Unit]
+Description=WebApplication Task Management via celery beat
+Documentation=Consult the automation agent for infos on the WebApplication running on this localhost
+Wants=nginx.service
+After=nginx.service
+
+# Combined with Restart=5, this will always and forever restart the service if it dies without putting too much stress on it.
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+WorkingDirectory=/app/src
+
+User=app
+Group=app
+
+Environment="PATH=$PATH:/app/src/.venv/bin"
+Environment="GIT_PYTHON_GIT_EXECUTABLE=/usr/bin/git"
+EnvironmentFile=/app/src/envs/production.env
+
+PIDFile=/app/celerybeat.pid
+ExecStart=/app/src/.venv/bin/celery --app config.celeryapp beat --loglevel=DEBUG
+ExecReload=/app/src/.venv/bin/celery --app config.celeryapp beat --loglevel=DEBUG
+ExecStop=/bin/kill --signal TERM $MAINPID
+ExecStopPost=/bin/rm --force '/app/celerybeat.pid'
+
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

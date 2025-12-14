@@ -1,0 +1,69 @@
+"""
+custom system checks
+https://docs.djangoproject.com/en/dev/topics/checks/
+
+Message classes available are:
+    Debug
+    Info
+    Warning
+    Error
+    Critical
+
+More custom checks in the real world
+-> checking translations: https://hakibenita.com/automating-the-boring-stuff-in-django-using-the-check-framework)
+
+"""
+import os
+
+from django.conf import settings
+from django.core import checks as django_core_checks
+
+
+class Tags(django_core_checks.Tags):
+    """
+    Extended custom tags for system checks
+    """
+
+    email = "email"
+    migrations = "migrations"
+
+
+W001 = django_core_checks.Warning(
+    "Development settings for `EMAIL_BACKEND` are recommended to be set to"
+    " `django.core.mail.backends.console.EmailBackend`.",
+    id="core.W001",
+)
+
+W002 = django_core_checks.Warning(
+    "The initial migration for your custom users app in `apps.users` is inconsistent with"
+    " `core.users.migrations.0001_initial`, which should be applied first."
+    " Hint: copy `core.users.migrations.0001_initial` to your users app as initial migration.",
+    id="core.W002",
+)
+
+
+@django_core_checks.register(Tags.email, deploy=False)
+def check_email_backend(app_configs, **kwargs):
+    """
+    Ensure email backend is console backend in development.
+    """
+    warnings = []
+    if settings.EMAIL_BACKEND != "django.core.mail.backends.console.EmailBackend" and not os.environ[
+        "DJANGO_SETTINGS_MODULE"
+    ].endswith("production"):
+        warnings.append(W001)
+    return warnings
+
+
+@django_core_checks.register(Tags.migrations, deploy=False)
+def check_user_migrations(app_configs, **kwargs):
+    """
+    Ensure custom users migration (if exists) matches core.users.migrations.0001_initial.
+    """
+    warnings = []
+    custom_users_app = settings.APPS_DIR / "users" / "migrations" / "0001_initial.py"
+    core_users_app = settings.ROOT_DIR / "core" / "users" / "migrations" / "0001_initial.py"
+    assert core_users_app.exists(), "core.users.migrations.0001_initial.py does not exist, this should not happen."
+    if custom_users_app.exists() and custom_users_app.read_text() != core_users_app.read_text():
+        warnings.append(W002)
+    return warnings

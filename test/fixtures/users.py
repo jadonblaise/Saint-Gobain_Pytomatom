@@ -1,0 +1,69 @@
+import pytest
+
+from django.contrib.auth import get_user_model
+
+from test.factories.users import generic_user_factory, admin_user_factory
+
+
+@pytest.fixture
+def valid_password() -> str:
+    """
+    A valid password that passes the password validation.
+    """
+    return "secretpasswordthatpassesvalidation1!"
+
+
+@pytest.fixture
+def wrong_password() -> str:
+    """
+    A wrong password that passes the password validation.
+    """
+    return "wrongpasswordthatpassesvalidation1!"
+
+
+@pytest.fixture
+def invalid_password() -> str:
+    """
+    An invalid password that does not pass the password validation.
+    """
+    return "invalid"
+
+
+@pytest.fixture
+def user(valid_password):
+    """
+    Yields from user factory.
+    """
+    user = generic_user_factory(password=valid_password)
+    yield user
+    get_user_model().objects.get(email=user.email).delete()  # type: ignore[no-untyped-call]
+
+
+@pytest.fixture
+def verified_user(valid_password):
+    """
+    Yields from user factory. Activation is enforced explicitly.
+    """
+    user = generic_user_factory(is_active=True, password=valid_password)
+    yield user
+    get_user_model().objects.get(email=user.email).delete()  # type: ignore[no-untyped-call]
+
+
+@pytest.fixture
+def verified_admin_user(valid_password):
+    """
+    Yields from adminuser factory. Activation is enforced explicitly.
+    """
+    user = admin_user_factory(is_active=True, is_staff=True, password=valid_password)
+    yield user
+    get_user_model().objects.get(email=user.email).delete()  # type: ignore[no-untyped-call]
+
+
+@pytest.fixture
+def unverified_user(valid_password):
+    """
+    Yields from user factory. User is explicitly de-activated.
+    """
+    user = generic_user_factory(is_active=False, password=valid_password)
+    yield user
+    get_user_model().objects.get(email=user.email).delete()  # type: ignore[no-untyped-call]

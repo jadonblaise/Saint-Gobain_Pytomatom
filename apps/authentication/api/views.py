@@ -1,0 +1,254 @@
+import logging
+
+from jose import jwt, JWTError
+from rest_framework import status
+from rest_framework.exceptions import NotAuthenticated
+from rest_framework.response import Response
+from rest_framework.views import APIView
+
+from django.conf import settings
+from django.core.cache import caches
+from django.dispatch import Signal
+from django.http import JsonResponse
+from django.urls import reverse
+from django.utils import timezone
+from django.utils.http import http_date
+
+from core.crud.users import get_user_by_email
+from core.cypher import tokens
+from core.typehints.django import UserType
+
+from .backends import MSG_AUTHENTICATION_FAILED, MSG_VERIFICATION_FAILED, JWTAuthentication
+
+
+log = logging.getLogger("django")
+
+
+class AuthTokenLogin(APIView):
+    # ! empty lists mean no authentication/permission required
+    # No authentication required for login, obviously.
+    authentication_classes = []
+    # No permissions required for login too.
+    permission_classes = []
+
+    def post(self, request):
+        """
+        Implement the POST method for the login view.
+
+        Return JWT-Authentication access-token in the header and refrseh token in the json response.
+        """
+        email = request.data.get("email")
+        password = request.data.get("password")
+
+        user: UserType | None = get_user_by_email(email=email)
+        if user is None:
+            return Response({"error": MSG_AUTHENTICATION_FAILED}, status=status.HTTP_401_UNAUTHORIZED)
+        if user.is_active is False:
+            return Response({"error": MSG_AUTHENTICATION_FAILED}, status=status.HTTP_401_UNAUTHORIZED)
+        if user.check_password(password) is False:
+            return Response({"error": MSG_AUTHENTICATION_FAILED}, status=status.HTTP_401_UNAUTHORIZED)
+
+        assert hasattr(user, "email")  # Should be enforced by the user model.
+        assert user.email  # Should be enforced by the user model.
+
+        now = timezone.now()
+
+        signature = tokens.urlsafe_token(8)
+        access_token: tokens.JWTAccessToken = tokens.jwt_token(
+            tokentype="access",
+            signature=signature,
+            email=user.email,
+            now=now,
+            expires_in=tokens.DEFAULT_JWT_TOKEN_ACCESS_EXPIRATION_MINUTES,
+        )
+        refresh_token: tokens.JWTAccessToken = tokens.jwt_token(
+            tokentype="refresh",
+            signature=signature,
+            email=user.email,
+            now=now,
+            expires_in=tokens.DEFAULT_JWT_TOKEN_REFRESH_EXPIRATION_MINUTES,
+        )
+
+        response = JsonResponse({"refresh": f"{refresh_token}"})
+        response.set_cookie(
+            key=tokens.DEFAULT_JWT_TOKEN_COOKIE_KEY,
+            value=f"Bearer {access_token}",
+            max_age=tokens.DEFAULT_JWT_TOKEN_ACCESS_EXPIRATION_MINUTES * 60,  # seconds
+            expires=http_date(now.timestamp()),
+            path=f"/{settings.API_BASE_URL}",
+            domain=f"{settings.PROJECT_DOMAIN}",
+            secure=True,
+            httponly=True,
+        )
+        return response
+
+
+class AuthTokenVerify(APIView):
+    # No authentication required for token verification.
+    authentication_classes = []
+    # No permissions required for token verification too.
+    permission_classes = []
+
+    def post(self, request):
+        """
+        Verify a token is valid.
+        """
+        try:
+            user, token = JWTAuthentication().authenticate(request=request)
+        except NotAuthenticated:
+            return Response({"error": MSG_VERIFICATION_FAILED}, status=status.HTTP_401_UNAUTHORIZED)
+        if user is None or token is None:
+            return Response({"error": MSG_VERIFICATION_FAILED}, status=status.HTTP_401_UNAUTHORIZED)
+        return Response({"detail": "Token is valid."}, status=status.HTTP_200_OK)
+
+
+class AuthTokenRefresh(APIView):
+    # No authentication required for token refresh.
+    authentication_classes = []
+    # No permissions required for token refresh too.
+    permission_classes = []
+
+    def get(self, request):
+        return JsonResponse({"detail": "post your refresh-token to get a new access token."})
+
+    def post(self, request):
+        """
+        Refresh a token.
+        """
+        authentication_failed_repsonse = Response(
+            {"error": MSG_AUTHENTICATION_FAILED}, status=status.HTTP_401_UNAUTHORIZED
+        )
+
+        refresh_token = request.data.get("refresh")
+        if refresh_token is None:
+            return authentication_failed_repsonse
+        if caches["jwt-blacklist"].get(refresh_token[:247]):
+            return authentication_failed_repsonse
+        try:
+            payload: dict = jwt.decode(
+                token=refresh_token, key=settings.SECRET_KEY, algorithms=[tokens.DEFAULT_JWT_TOKEN_ALGORITHM]
+            )
+        except JWTError:
+            return authentication_failed_repsonse
+        if payload["type"] != "refresh":
+            return authentication_failed_repsonse
+
+        # the access token shall still be included in the cookie
+        authentication = request.COOKIES.get(tokens.DEFAULT_JWT_TOKEN_COOKIE_KEY)
+        if authentication is None:
+            return authentication_failed_repsonse
+        if tokens.DEFAULT_JWT_TOKEN_PREFIX.lower() not in authentication.lower():
+            return authentication_failed_repsonse
+
+        access_token: tokens.JWTAccessToken = authentication.removeprefix(
+            f"{tokens.DEFAULT_JWT_TOKEN_PREFIX} "
+        )  # ! note that the space is required
+
+        # now we validate the random signature included upon creation
+        try:
+            acccess_payload = tokens.insecure_decode_jwt_token(access_token, force=True)
+        except JWTError:
+            return authentication_failed_repsonse
+        if payload["signature"] != acccess_payload["signature"]:
+            return authentication_failed_repsonse
+
+        user = get_user_by_email(email=payload["sub"])
+        if user is None:
+            return authentication_failed_repsonse
+        if user.is_active is False:
+            return authentication_failed_repsonse
+        assert hasattr(user, "email")  # Should be enforced by the user model.
+        assert user.email  # Should be enforced by the user model.
+        now = timezone.now()
+
+        signature = tokens.urlsafe_token(8)
+        access_token: tokens.JWTAccessToken = tokens.jwt_token(
+            tokentype="access",
+            signature=signature,
+            email=user.email,
+            now=now,
+            expires_in=tokens.DEFAULT_JWT_TOKEN_ACCESS_EXPIRATION_MINUTES,
+        )
+        refresh_token: tokens.JWTAccessToken = tokens.jwt_token(
+            tokentype="refresh",
+            signature=signature,
+            email=user.email,
+            now=now,
+            expires_in=tokens.DEFAULT_JWT_TOKEN_REFRESH_EXPIRATION_MINUTES,
+        )
+
+        response = JsonResponse({"refresh": f"{refresh_token}"})
+        response.set_cookie(
+            key=tokens.DEFAULT_JWT_TOKEN_COOKIE_KEY,
+            value=f"Bearer {access_token}",
+            max_age=tokens.DEFAULT_JWT_TOKEN_ACCESS_EXPIRATION_MINUTES * 60,  # seconds
+            expires=http_date(now.timestamp()),
+            path=f"/{settings.API_BASE_URL}",
+            domain=f"{settings.PROJECT_DOMAIN}",
+            secure=True,
+            httponly=True,
+        )
+        return response
+
+
+class AuthTokenLogout(APIView):
+    authentication_classes = [JWTAuthentication]
+    # No permissions required for token logout.
+    permission_classes = []
+
+    def post(self, request):
+        """
+        Logout a user by removing the access token from the cookie.
+        The refresh token is also blacklisted, and should be provided by the client.
+        """
+        access_token = request.COOKIES.get(tokens.DEFAULT_JWT_TOKEN_COOKIE_KEY).removeprefix(
+            f"{tokens.DEFAULT_JWT_TOKEN_PREFIX} "
+        )
+        refresh_token = request.data.get("refresh")
+        caches["jwt-blacklist"].set(
+            access_token[:247], True, timeout=tokens.DEFAULT_JWT_TOKEN_ACCESS_EXPIRATION_MINUTES
+        )
+        if refresh_token is not None:
+            caches["jwt-blacklist"].set(
+                refresh_token[:247], True, timeout=tokens.DEFAULT_JWT_TOKEN_REFRESH_EXPIRATION_MINUTES
+            )
+
+        try:
+            payload: dict = jwt.decode(
+                token=access_token, key=settings.SECRET_KEY, algorithms=[tokens.DEFAULT_JWT_TOKEN_ALGORITHM]
+            )
+            user = get_user_by_email(email=payload["sub"])
+        except JWTError:
+            user = None
+
+        if refresh_token is None:
+            response = JsonResponse(
+                {"error": "Logout failed. Provide the users refresh token for a proper logout."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+            # logout anyway
+        else:
+            response = JsonResponse(
+                {"detail": "Successfully logged out.", "redirect": reverse(settings.LOGOUT_REDIRECT_URL)},
+                status=status.HTTP_200_OK,
+            )
+
+        response.delete_cookie(
+            key=tokens.DEFAULT_JWT_TOKEN_COOKIE_KEY,
+            path=f"/{settings.API_BASE_URL}",
+            domain=f"{settings.PROJECT_DOMAIN}",
+        )
+
+        if user is not None:
+            Signal().send(sender=user.__class__, request=request, user=user)
+        else:
+            log.critical("Authenticated User not found for token logout. This should not happen.")
+
+        if hasattr(request, "session"):
+            request.session.flush()
+        if hasattr(request, "user"):
+            from django.contrib.auth.models import AnonymousUser
+
+            request.user = AnonymousUser()
+
+        return response

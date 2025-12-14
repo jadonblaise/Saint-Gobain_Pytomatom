@@ -1,0 +1,227 @@
+{
+  "files": [
+    {
+      "path": "01 Workbench PPS V3.2.xlsm",
+      "meta": "",
+      "scripts": [
+        {
+          "name": "Tabelle4.cls",
+          "meta": ""
+        },
+        {
+          "name": "Autoamtom.bas",
+          "meta": ""
+        },
+        {
+          "name": "COUNTRY_PLANNER.bas",
+          "meta": ""
+        },
+        {
+          "name": "DemandForecast.bas",
+          "meta": ""
+        },
+        {
+          "name": "FloatPlanernNeueWoche.bas",
+          "meta": ""
+        },
+        {
+          "name": "FloatPlanerTagesdaten.bas",
+          "meta": ""
+        },
+        {
+          "name": "MAGPlanerNeueWoche.bas",
+          "meta": ""
+        },
+        {
+          "name": "MAGPlanerTagesdaten.bas",
+          "meta": ""
+        },
+        {
+          "name": "Master_Planner.bas",
+          "meta": ""
+        },
+        {
+          "name": "ORDERM.bas",
+          "meta": ""
+        },
+        {
+          "name": "OrderManagement_MSTR.bas",
+          "meta": ""
+        },
+        {
+          "name": "StandardFunktionen.bas",
+          "meta": ""
+        },
+        {
+          "name": "Update_FLOAT.bas",
+          "meta": ""
+        },
+        {
+          "name": "Update_MAG.bas",
+          "meta": ""
+        },
+        {
+          "name": "Update_Trans.bas",
+          "meta": ""
+        },
+        {
+          "name": "Update_VSG.bas",
+          "meta": ""
+        },
+        {
+          "name": "VSGPlanerNeueWoche.bas",
+          "meta": ""
+        },
+        {
+          "name": "VSGPlanerTagesdaten.bas",
+          "meta": ""
+        }
+      ]
+    },
+    {
+      "path": "20230508_CS Requests.xlsm",
+      "meta": "",
+      "scripts": [
+        {
+          "name": "Modul1.bas",
+          "meta": ""
+        }
+      ]
+    },
+    {
+      "path": "Entwurf Float-Planer_inkl Formeln.xlsx",
+      "meta": "cell formulas only",
+      "scripts": []
+    },
+    {
+      "path": "Entwurf MAG-Planer_inkl Formeln.xlsx",
+      "meta": "cell formulas only",
+      "scripts": []
+    },
+    {
+      "path": "G035ProdPlanning.xlsx",
+      "meta": "spread sheet only - no formulas",
+      "scripts": []
+    },
+    {
+      "path": "Master Report 2.2 ES.xlsm",
+      "meta": "",
+      "scripts": [
+        {
+          "name": "Sheet1.cls",
+          "meta": ""
+        },
+        {
+          "name": "Sheet9.cls",
+          "meta": ""
+        },
+        {
+          "name": "Module1.bas",
+          "meta": ""
+        }
+      ]
+    },
+    {
+      "path": "PLC + Stock Simulation.xlsx",
+      "meta": "cell formulas only",
+      "scripts": []
+    },
+
+    {
+      "path": "OrderManagementPython/000_MSTR_DATA_COUNTRY_GERMANY_Planner_aktuell.xlsx",
+      "meta": "spread sheet only - no formulas",
+      "scripts": []
+    },
+    {
+      "path": "OrderManagementPython/G035 Auftragsbestand.xlsx",
+      "meta": "spread sheet only - no formulas",
+      "scripts": []
+    },
+    {
+      "path": "OrderManagementPython/ORION Bestand 2023_04_11.xlsx",
+      "meta": "spread sheet only - no formulas",
+      "scripts": []
+    },
+    {
+      "path": "OrderManagementPython/Produktionsprogramm G035 Float.xlsx",
+      "meta": "spread sheet only - no formulas",
+      "scripts": []
+    },
+    {
+      "path": "OrderManagementPython/Produktionsprogramm G035 MAG.xlsx",
+      "meta": "cell formulas only",
+      "scripts": []
+    },
+    {
+      "path": "OrderManagementPython/SC_DO03 Order Management PORZ.xlsx",
+      "meta": "spread sheet only - no formulas",
+      "scripts": []
+    },
+    {
+      "path": "OrderManagementPython/OrderManagement.py",
+      "meta": "",
+      "scripts": []
+    },
+
+    {
+      "path": "Demand Forecast/20230505 Demand Basis Datei MS.xlsx",
+      "meta": "cell formulas only",
+      "scripts": []
+    },
+    {
+      "path": "Demand Forecast/20230507 DACH_Forecast.xlsx",
+      "meta": "cell formulas only",
+      "scripts": []
+    },
+    {
+      "path": "Demand Forecast/20230507 Demand Basis Datei MS.xlsm",
+      "meta": "",
+      "scripts": [
+        {
+          "name": "Module1.bas",
+          "meta": ""
+        }
+      ]
+    },
+    {
+      "path": "Demand Forecast/20230509 DACH_Forecast.xlsm",
+      "meta": "spread sheet only - no formulas",
+      "scripts": []
+    },
+    {
+      "path": "Demand Forecast/20230509 DACH_Forecast-Test.xlsx",
+      "meta": "spread sheet only - no formulas",
+      "scripts": []
+    },
+    {
+      "path": "Demand Forecast/Aufbereitung Microstrategy Report.txt",
+      "meta": "",
+      "scripts": []
+    },
+    {
+      "path": "Demand Forecast/Coding-text.txt",
+      "meta": "",
+      "scripts": []
+    },
+    {
+      "path": "Demand Forecast/Demand Forecast.xls",
+      "meta": "empty spread sheet only",
+      "scripts": []
+    },
+    {
+      "path": "Demand Forecast/Demand Forecast.xlsx",
+      "meta": "spread sheet only - no formulas",
+      "scripts": []
+    },
+    {
+      "path": "Demand Forecast/MSTR Links.txt",
+      "meta": "",
+      "scripts": []
+    },
+    {
+      "path": "Demand Forecast/Shipping Plant Split.xlsx",
+      "meta": "spread sheet only - no formulas",
+      "scripts": []
+    }
+  ]
+}

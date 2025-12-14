@@ -1,0 +1,395 @@
+from datetime import timedelta
+from http import cookies
+
+import pytest
+from freezegun import freeze_time
+from jose import jwt
+
+from django.conf import settings
+from django.utils import timezone
+from django.utils.http import http_date
+
+from apps.authentication.api.backends import MSG_AUTHENTICATION_FAILED
+from core.cypher import tokens
+
+
+def test_token_prefix_is_bearer():
+    assert tokens.DEFAULT_JWT_TOKEN_PREFIX == "Bearer"
+
+
+@pytest.mark.django_db(transaction=True)
+def test_obtain_token_with_valid_credentials_succeeds_and_token_is_valid(client, verified_user, valid_password: str):
+    payload = {"email": f"{verified_user.email}", "password": valid_password}
+
+    url = f"/{settings.API_BASE_URL}/auth/token/"
+    response = client.post(url, data=payload)
+    now = timezone.now()
+    assert response.status_code == 200
+    assert response.headers["Content-Type"] == "application/json"
+
+    auth_cookie: cookies.Morsel = response.cookies["Authentication"]
+    assert auth_cookie.key == "Authentication"
+    access_token: tokens.JWTAccessToken = tokens.JWTAccessToken(
+        auth_cookie.value.removeprefix(f"{tokens.DEFAULT_JWT_TOKEN_PREFIX} ")
+    )
+
+    assert auth_cookie.value == f"Bearer {access_token}"
+    assert auth_cookie["secure"] is True
+    assert auth_cookie["httponly"] is True
+    assert auth_cookie["domain"] == settings.PROJECT_DOMAIN
+    assert auth_cookie["expires"] in [
+        http_date((now + timedelta(seconds=1)).timestamp()),
+        http_date(now.timestamp()),
+        http_date((now - timedelta(seconds=1)).timestamp()),
+    ]
+    assert auth_cookie["max-age"] == tokens.DEFAULT_JWT_TOKEN_ACCESS_EXPIRATION_MINUTES * 60
+    assert auth_cookie["path"] == f"/{settings.API_BASE_URL}"
+    assert auth_cookie["samesite"] == ""
+    assert auth_cookie["version"] == ""
+    assert auth_cookie["comment"] == ""
+
+    access_token_payload: dict = jwt.decode(
+        token=access_token, key=settings.SECRET_KEY, algorithms=[tokens.DEFAULT_JWT_TOKEN_ALGORITHM]
+    )
+    assert access_token_payload["sub"] == verified_user.email
+    assert access_token_payload["zoneinfo"] == settings.TIME_ZONE
+    assert (
+        access_token_payload["exp"]
+        == access_token_payload["iat"] + tokens.DEFAULT_JWT_TOKEN_ACCESS_EXPIRATION_MINUTES * 60
+    )
+    assert settings.PROJECT_FQDN.netloc in access_token_payload["iss"]
+
+    assert response.json()["refresh"] is not None
+    refresh_token: tokens.JWTAccessToken = tokens.JWTAccessToken(response.json()["refresh"])
+    refresh_token_payload: dict = jwt.decode(
+        token=refresh_token, key=settings.SECRET_KEY, algorithms=[tokens.DEFAULT_JWT_TOKEN_ALGORITHM]
+    )
+    assert refresh_token_payload["sub"] == verified_user.email
+    assert refresh_token_payload["zoneinfo"] == settings.TIME_ZONE
+    assert (
+        refresh_token_payload["exp"]
+        == refresh_token_payload["iat"] + tokens.DEFAULT_JWT_TOKEN_REFRESH_EXPIRATION_MINUTES * 60
+    )
+    assert settings.PROJECT_FQDN.netloc in refresh_token_payload["iss"]
+
+
+@pytest.mark.django_db
+def test_login_with_valid_credentials_gains_access(client, verified_user, valid_password: str):
+    # Check that the user cannot access the protected endpoint without being authorized at all
+    response = client.get(f"/{settings.API_BASE_URL}/protectiontest/")
+    assert response.status_code == 401
+    # Obtain an access token
+    login_payload = {"email": f"{verified_user.email}", "password": valid_password}
+    login_response = client.post(f"/{settings.API_BASE_URL}/auth/token/", json=login_payload)
+    assert login_response.status_code == 200
+    # Try to access a protected endpoint with authorized user
+    token = login_response.cookies["Authentication"].value.removeprefix(f"{tokens.DEFAULT_JWT_TOKEN_PREFIX} ")
+    headers = {"Authorization": f"Bearer {token}"}
+    response = client.get(f"/{settings.API_BASE_URL}/protectiontest/", headers=headers)
+    assert response.status_code == 200
+
+
+@pytest.mark.django_db
+def test_login_with_valid_credentials_and_missing_permissions_fails(client, verified_user, valid_password: str):
+    # Check that the user cannot access the protected endpoint without being authorized at all
+    response = client.get(f"/{settings.API_BASE_URL}/adminprotectiontest/")
+    assert response.status_code == 401
+    # Obtain an access token
+    login_payload = {"email": f"{verified_user.email}", "password": valid_password}
+    login_response = client.post(f"/{settings.API_BASE_URL}/auth/token/", json=login_payload)
+    assert login_response.status_code == 200
+    # Try to access a protected endpoint with authorized user
+    token = login_response.cookies["Authentication"].value.removeprefix(f"{tokens.DEFAULT_JWT_TOKEN_PREFIX} ")
+    headers = {"Authorization": f"Bearer {token}"}
+    response = client.get(f"/{settings.API_BASE_URL}/adminprotectiontest/", headers=headers)
+    assert response.status_code == 403
+    assert response.json() == {"detail": "You do not have permission to perform this action."}
+
+
+@pytest.mark.django_db
+def test_login_with_valid_credentials_and_correct_permissions_succeeds(
+    client, verified_admin_user, valid_password: str
+):
+    # Check that the user cannot access the protected endpoint without being authorized at all
+    response = client.get(f"/{settings.API_BASE_URL}/adminprotectiontest/")
+    assert response.status_code == 401
+    # Obtain an access token
+    login_payload = {"email": f"{verified_admin_user.email}", "password": valid_password}
+    login_response = client.post(f"/{settings.API_BASE_URL}/auth/token/", json=login_payload)
+    assert login_response.status_code == 200
+    # Try to access a protected endpoint with authorized user
+    token = login_response.cookies["Authentication"].value.removeprefix(f"{tokens.DEFAULT_JWT_TOKEN_PREFIX} ")
+    headers = {"Authorization": f"Bearer {token}"}
+    response = client.get(f"/{settings.API_BASE_URL}/adminprotectiontest/", headers=headers)
+    assert response.status_code == 200
+    assert response.json() == {
+        "planets": ["mercury", "venus", "earth", "mars", "jupiter", "saturn", "uranus", "neptune"]
+    }
+
+
+@pytest.mark.django_db
+def test_verify_access_token_succeeds(client, verified_user, valid_password: str):
+    # Obtain an access token
+    login_payload = {"email": f"{verified_user.email}", "password": valid_password}
+    login_response = client.post(f"/{settings.API_BASE_URL}/auth/token/", json=login_payload)
+    assert login_response.status_code == 200
+    # Verify the token
+    token = login_response.cookies["Authentication"].value.removeprefix(f"{tokens.DEFAULT_JWT_TOKEN_PREFIX} ")
+    headers = {"Authorization": f"Bearer {token}"}
+    response = client.post(f"/{settings.API_BASE_URL}/auth/token/verify/", headers=headers)
+    assert response.status_code == 200
+
+
+@pytest.mark.django_db
+def test_verify_access_token_succeeds_fails_with_user_deactivated(client, verified_user, valid_password: str):
+    # Obtain an access token
+    login_payload = {"email": f"{verified_user.email}", "password": valid_password}
+    login_response = client.post(f"/{settings.API_BASE_URL}/auth/token/", json=login_payload)
+    assert login_response.status_code == 200
+    # Deactivate the user
+    verified_user.is_active = False
+    verified_user.save()
+    # Verify the token
+    token = login_response.cookies["Authentication"].value.removeprefix(f"{tokens.DEFAULT_JWT_TOKEN_PREFIX} ")
+    headers = {"Authorization": f"Bearer {token}"}
+    response = client.post(f"/{settings.API_BASE_URL}/auth/token/verify/", headers=headers)
+    assert response.status_code == 401
+
+
+@pytest.mark.django_db
+def test_obtain_token_with_invalid_credentials_fails(client, verified_user, invalid_password: str):
+    payload = {"email": verified_user.email, "password": invalid_password}
+    url = f"/{settings.API_BASE_URL}/auth/token/"
+    response = client.post(url, json=payload)
+    assert response.status_code == 401
+    assert response.json()["error"] == MSG_AUTHENTICATION_FAILED
+
+
+@pytest.mark.django_db
+def test_obtain_token_with_inactive_user_fails(client, unverified_user, valid_password: str):
+    payload = {"email": unverified_user.email, "password": valid_password}
+    response = client.post(f"/{settings.API_BASE_URL}/auth/token/", json=payload)
+    assert response.status_code == 401
+    assert response.json()["error"] == MSG_AUTHENTICATION_FAILED
+
+
+@pytest.mark.django_db
+def test_obtain_a_fresh_access_token_with_invalid_refresh_token_fails(
+    client, invalid_refresh_token, verified_user, valid_password: str
+):
+    # Obtain an access token
+    login_payload = {"email": f"{verified_user.email}", "password": valid_password}
+    login_response = client.post(f"/{settings.API_BASE_URL}/auth/token/", json=login_payload)
+    assert login_response.status_code == 200
+    payload = {"refresh": invalid_refresh_token}
+    response = client.post(f"/{settings.API_BASE_URL}/auth/token/refresh/", json=payload)
+    assert response.status_code == 401
+
+
+@pytest.mark.django_db
+def test_access_with_expired_access_token_fails(client, verified_user, valid_password: str):
+    # Obtain an access token
+    login_payload = {"email": f"{verified_user.email}", "password": valid_password}
+    now = timezone.now()
+    login_response = client.post(f"/{settings.API_BASE_URL}/auth/token/", json=login_payload)
+    assert login_response.status_code == 200
+    # Manually expire the access token.
+    token = login_response.cookies["Authentication"].value.removeprefix(f"{tokens.DEFAULT_JWT_TOKEN_PREFIX} ")
+    headers = {"Authorization": f"Bearer {token}"}
+    then = now + timedelta(seconds=tokens.DEFAULT_JWT_TOKEN_ACCESS_EXPIRATION_MINUTES * 60 + 1)
+    with freeze_time(then):
+        response = client.get(f"/{settings.API_BASE_URL}/protectiontest/", headers=headers)
+    assert response.status_code == 401
+
+
+@pytest.mark.django_db
+def test_obtain_a_fresh_access_token_with_valid_refresh_token_succeeds(client, verified_user, valid_password: str):
+    # Obtain an access token
+    login_payload = {"email": f"{verified_user.email}", "password": valid_password}
+    now = timezone.now()
+    login_response = client.post(f"/{settings.API_BASE_URL}/auth/token/", json=login_payload)
+    assert login_response.status_code == 200
+    # Obtain a new access token
+    payload = {"refresh": login_response.json()["refresh"]}
+
+    response = client.post(f"/{settings.API_BASE_URL}/auth/token/refresh/", json=payload)
+
+    assert response.status_code == 200
+    assert response.headers["Content-Type"] == "application/json"
+
+    auth_cookie: cookies.Morsel = response.cookies["Authentication"]
+    assert auth_cookie.key == "Authentication"
+    access_token: tokens.JWTAccessToken = tokens.JWTAccessToken(
+        auth_cookie.value.removeprefix(f"{tokens.DEFAULT_JWT_TOKEN_PREFIX} ")
+    )
+
+    assert auth_cookie.value == f"Bearer {access_token}"
+    assert auth_cookie["secure"] is True
+    assert auth_cookie["httponly"] is True
+    assert auth_cookie["domain"] == settings.PROJECT_DOMAIN
+    assert auth_cookie["expires"] in [
+        http_date((now + timedelta(seconds=1)).timestamp()),
+        http_date(now.timestamp()),
+        http_date((now - timedelta(seconds=1)).timestamp()),
+    ]
+    assert auth_cookie["max-age"] == tokens.DEFAULT_JWT_TOKEN_ACCESS_EXPIRATION_MINUTES * 60
+    assert auth_cookie["path"] == f"/{settings.API_BASE_URL}"
+    assert auth_cookie["samesite"] == ""
+    assert auth_cookie["version"] == ""
+    assert auth_cookie["comment"] == ""
+
+    access_token_payload: dict = jwt.decode(
+        token=access_token, key=settings.SECRET_KEY, algorithms=[tokens.DEFAULT_JWT_TOKEN_ALGORITHM]
+    )
+    assert access_token_payload["sub"] == verified_user.email
+    assert access_token_payload["zoneinfo"] == settings.TIME_ZONE
+    assert (
+        access_token_payload["exp"]
+        == access_token_payload["iat"] + tokens.DEFAULT_JWT_TOKEN_ACCESS_EXPIRATION_MINUTES * 60
+    )
+    assert settings.PROJECT_FQDN.netloc in access_token_payload["iss"]
+
+    assert response.json()["refresh"] is not None
+    refresh_token: tokens.JWTAccessToken = tokens.JWTAccessToken(response.json()["refresh"])
+    refresh_token_payload: dict = jwt.decode(
+        token=refresh_token, key=settings.SECRET_KEY, algorithms=[tokens.DEFAULT_JWT_TOKEN_ALGORITHM]
+    )
+    assert refresh_token_payload["sub"] == verified_user.email
+    assert refresh_token_payload["zoneinfo"] == settings.TIME_ZONE
+    assert (
+        refresh_token_payload["exp"]
+        == refresh_token_payload["iat"] + tokens.DEFAULT_JWT_TOKEN_REFRESH_EXPIRATION_MINUTES * 60
+    )
+    assert settings.PROJECT_FQDN.netloc in refresh_token_payload["iss"]
+
+
+@pytest.mark.django_db
+def test_obtain_a_fresh_access_token_with_expired_refresh_token_fails(client, verified_user, valid_password: str):
+    # Obtain an access token
+    login_payload = {"email": f"{verified_user.email}", "password": valid_password}
+
+    now = timezone.now()
+    login_response = client.post(f"/{settings.API_BASE_URL}/auth/token/", json=login_payload)
+    assert login_response.status_code == 200
+    payload = {"refresh": login_response.json()["refresh"]}
+
+    # Manually expire the refresh token.
+    then = now + timedelta(seconds=tokens.DEFAULT_JWT_TOKEN_REFRESH_EXPIRATION_MINUTES * 60 + 1)
+    with freeze_time(then):
+        # Obtain a new access token
+        response = client.post(f"/{settings.API_BASE_URL}/auth/token/refresh/", json=payload)
+
+    assert response.status_code == 401
+
+
+@pytest.mark.django_db
+def test_just_login_with_refresh_token_as_access_token_fails(client, verified_user, valid_password: str):
+    # Obtain an access token
+    login_payload = {"email": f"{verified_user.email}", "password": valid_password}
+    login_response = client.post(f"/{settings.API_BASE_URL}/auth/token/", json=login_payload)
+    assert login_response.status_code == 200
+    # login with refresh token as access token
+    refresh_token = login_response.json()["refresh"]
+    client.cookies = cookies.SimpleCookie({"Authentication": f"Bearer {refresh_token}"})
+    response = client.get(f"/{settings.API_BASE_URL}/protectiontest/")
+    assert response.status_code == 401, "Should fail with 401 because refresh tokens should not be allowed to access"
+
+
+@pytest.mark.django_db
+def test_cant_refresh_with_accesstoken(client, verified_user, valid_password: str):
+    # Obtain the access token
+    login_payload = {"email": f"{verified_user.email}", "password": valid_password}
+    login_response = client.post(f"/{settings.API_BASE_URL}/auth/token/", json=login_payload)
+    assert login_response.status_code == 200
+
+    auth_cookie: cookies.Morsel = login_response.cookies["Authentication"]
+    access_token: tokens.JWTAccessToken = tokens.JWTAccessToken(
+        auth_cookie.value.removeprefix(f"{tokens.DEFAULT_JWT_TOKEN_PREFIX} ")
+    )
+
+    # Obtain a new access token with the refresh token
+    payload = {"refresh": access_token}
+
+    response = client.post(f"/{settings.API_BASE_URL}/auth/token/refresh/", json=payload)
+    assert response.status_code == 401, "Access tokens can not be used to refresh"
+
+
+@pytest.mark.django_db
+def test_cant_access_after_logout(client, verified_user, valid_password: str):
+    # Obtain the access token
+    login_payload = {"email": f"{verified_user.email}", "password": valid_password}
+    login_response = client.post(f"/{settings.API_BASE_URL}/auth/token/", json=login_payload)
+    assert login_response.status_code == 200
+
+    auth_cookie: cookies.Morsel = login_response.cookies["Authentication"]
+    assert auth_cookie.key == "Authentication"
+    token: tokens.JWTAccessToken = tokens.JWTAccessToken(
+        auth_cookie.value.removeprefix(f"{tokens.DEFAULT_JWT_TOKEN_PREFIX} ")
+    )
+    # Logout
+    response = client.post(
+        f"/{settings.API_BASE_URL}/auth/token/logout/", json={"refresh": login_response.json()["refresh"]}
+    )
+    assert response.status_code == 200
+    # Try to access a protected endpoint with authorized user and manually re-add the cookie that was removed by the logout
+    client.cookies = cookies.SimpleCookie({"Authentication": f"Bearer {token}"})
+    response = client.get(f"/{settings.API_BASE_URL}/protectiontest/")
+    # The access token should be blacklisted now
+    assert response.status_code == 401
+
+
+@pytest.mark.django_db
+def test_cant_refresh_after_logout_with_wrong_payload(client, verified_user, valid_password: str):
+    # Obtain the access token
+    login_payload = {"email": f"{verified_user.email}", "password": valid_password}
+    now = timezone.now()
+    login_response = client.post(f"/{settings.API_BASE_URL}/auth/token/", json=login_payload)
+    auth_cookie: cookies.Morsel = login_response.cookies["Authentication"]
+    assert auth_cookie.key == "Authentication"
+    old_access_token: tokens.JWTAccessToken = tokens.JWTAccessToken(
+        auth_cookie.value.removeprefix(f"{tokens.DEFAULT_JWT_TOKEN_PREFIX} ")
+    )
+    assert login_response.status_code == 200
+    # Logout
+    response = client.post(f"/{settings.API_BASE_URL}/auth/token/logout/", json={})
+    assert response.status_code == 400
+    assert response.json() == {"error": "Logout failed. Provide the users refresh token for a proper logout."}
+    # Obtain a new access token
+    # fails 401 with no payload
+    response = client.post(f"/{settings.API_BASE_URL}/auth/token/refresh/")
+    assert response.status_code == 401
+
+    # We should have another time by now, or tokens might be blacklisted, because they are literalaly the same for that user
+    then = now + timedelta(seconds=1)
+    with freeze_time(then):
+        # create another valid token
+        new_token = tokens.jwt_token(
+            tokentype="refresh",
+            email=verified_user.email,
+            now=timezone.now(),
+            expires_in=tokens.DEFAULT_JWT_TOKEN_ACCESS_EXPIRATION_MINUTES,
+        )
+        payload = {"refresh": new_token}
+        client.cookies["Authentication"] = f"Bearer {old_access_token}"
+        response = client.post(f"/{settings.API_BASE_URL}/auth/token/refresh/", json=payload)
+    assert (
+        response.status_code == 401
+    ), "The tokens should have a comparable random secret included, so the new_token should have a different signature and fail."
+
+
+@pytest.mark.django_db
+def test_cant_refresh_after_logout_with_payload(client, verified_user, valid_password: str):
+    # Obtain the access token
+    login_payload = {"email": f"{verified_user.email}", "password": valid_password}
+    login_response = client.post(f"/{settings.API_BASE_URL}/auth/token/", json=login_payload)
+    assert login_response.status_code == 200
+    # Logout
+    payload = {"email": f"{verified_user.email}", "refresh": login_response.json()["refresh"]}
+
+    response = client.post(f"/{settings.API_BASE_URL}/auth/token/logout/", json=payload)
+    assert response.status_code == 200
+    # Obtain a new access token
+    payload = {"refresh": login_response.json()["refresh"]}
+    # I'am logged out - because access token is blacklisted
+    response = client.post(f"/{settings.API_BASE_URL}/auth/token/refresh/", json=payload)
+    assert response.status_code == 401

@@ -1,0 +1,146 @@
+"""
+Django Development settings for pytomatom
+    * Debug is True
+    * Any allowed hosts
+
+This fill will be automatically used when using `manage.py`.
+See `base.py` for basic settings.
+
+For the full list of settings and their values, see
+https://docs.djangoproject.com/en/4.1/ref/settings/
+
+"""
+
+
+from urllib.parse import ParseResult
+
+from .environment.setup import prepare  # noqa: F403 NOSONAR
+from .base import *  # noqa: E402 F403 NOSONAR  pylint: disable=unused-wildcard-import,wildcard-import
+
+# read environment variables from .env and update the local environment
+env, settings = prepare(mode="develop")
+locals().update(settings)
+
+# ignore linting errors for undefined names (e.g. env after base * import)
+# ruff: noqa: F405
+
+
+# https://docs.djangoproject.com/en/4.1/ref/settings/#debug
+DEBUG = env.bool("DJANGO_DEBUG", True)  # ! in development only!
+
+# SECURITY WARNING: keep the secret key used in production secret!
+SECRET_KEY = env.str("DJANGO_SECRET_KEY")
+
+# =====PROJECT-SPECIFIC-SETTINGS===============================================
+# add project specific production settings here
+PROJECT_FQDN: ParseResult = env.url("PROJECT_FQDN")
+PROJECT_FRONTEND_FQDN: ParseResult = env.url("PROJECT_FRONTEND_FQDN")
+PROJECT_URL: str = PROJECT_FQDN.geturl()
+PROJECT_DOMAIN: str = PROJECT_FQDN.netloc.split(":")[0]
+
+# Production checklist:
+# See https://docs.djangoproject.com/en/4.1/howto/deployment/checklist/
+# =============================================================================
+
+
+# --- SECURITY CONFIGURATION --------------------------------------------------
+# Custom Admin URL, use {% verbatim %}{% url 'admin:index' %}{% endverbatim %}
+ADMIN_URL = env.str("DJANGO_ADMIN_URL", default="admin/")  # type: ignore[no-untyped-call]
+
+
+# https://docs.djangoproject.com/en/{{ docs_version }}/ref/settings/#allowed-hosts
+ALLOWED_HOSTS = ["*"]
+
+# for development, we don't need password validation
+AUTH_PASSWORD_VALIDATORS = []
+
+# Cors-headers are allowed for development
+CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOWED_ORIGINS = CORS_ORIGIN_WHITELIST = [
+    "http://localhost:3000",  # Vue Vite
+]
+CORS_ALLOW_METHODS = [
+    "GET",
+    "POST",
+    # de-actived methods:
+    # 'DELETE',
+    # 'OPTIONS',
+    # 'PATCH',
+    # 'PUT',
+]
+
+# Content-Security-Policy: https://www.w3.org/TR/CSP/
+# See https://django-csp.readthedocs.io/en/latest/configuration.html
+# Using: https://github.com/mozilla/django-csp
+CSP_CONNECT_SRC = ("*",)
+CSP_DEFAULT_SRC = ("*",)
+CSP_STYLE_SRC = (
+    "'unsafe-inline'",
+    "'self'",
+    "fonts.googleapis.com",
+)
+CSP_FONT_SRC = ("'self'", "fonts.gstatic.com")
+CSP_IMG_SRC = (
+    "'self'",
+    "'unsafe-eval'",
+)
+CSP_SCRIPT_SRC = (
+    "'self'",
+    "'unsafe-inline'",
+    "'unsafe-eval'",
+    "cdn.tailwindcss.com",  # tailwind
+    "cdn.jsdelivr.net",  # alpine
+    "unpkg.com",  # htmx
+)
+
+
+# -----------------------------------------------------------------------------
+
+
+CACHES["jwt-blacklist"]["BACKEND"] = "django.core.cache.backends.locmem.LocMemCache"  # type: ignore[index]
+# redis url is dependant on the environment
+# pylint: disable=undefined-variable
+CACHES["redis"]["LOCATION"] = REDIS_URL  # type: ignore[index, name-defined] # noqa: F405
+# http://docs.celeryproject.org/en/latest/userguide/configuration.html#std:setting-broker_url
+CELERY_BROKER_URL = REDIS_URL  # type: ignore[name-defined] # noqa: F405
+# http://docs.celeryproject.org/en/latest/userguide/configuration.html#std:setting-result_backend
+CELERY_RESULT_BACKEND = CELERY_BROKER_URL
+# pylint: enable=undefined-variable
+
+# The logging-filter 'log_database_queries' will log to the file, if LOG_DATABASE is True
+# Turn it only on in develop
+LOG_DATABASE = False
+
+# for development emails are send to console
+EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+# alternatively, deactivate email-verification with ACCOUNT_EMAIL_VERIFICATION = 'none'
+
+IPYTHON_ARGUMENTS = ["--debug", "--settings=config.settings.develop"]
+# fmt: off
+NOTEBOOK_ARGUMENTS = [  # to run the notebook with django 3 async set env DJANGO_ALLOW_ASYNC_UNSAFE=true
+    "--port", "8888",
+    "--ip", "0.0.0.0",
+    "--allow-root",
+    "--notebook-dir", "notebooks",
+    "--no-browser",
+    "--pythonpath", str(ROOT_DIR.resolve()),
+]
+# fmt: on
+
+
+# django-extensions------------------------------------------------------------
+# debug-toolbar
+def show_toolbar(request):  # pylint: disable=unused-argument
+    return False  # True
+
+
+if DEBUG:
+    DEBUG_TOOLBAR_PATCH_SETTINGS = False
+    INSTALLED_APPS += [
+        "debug_toolbar",
+    ]
+    MIDDLEWARE.insert(4, "debug_toolbar.middleware.DebugToolbarMiddleware")
+    # trick to have debug toolbar when developing with docker
+    DEBUG_TOOLBAR_CONFIG = {
+        "SHOW_TOOLBAR_CALLBACK": show_toolbar,
+    }

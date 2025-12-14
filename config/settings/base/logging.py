@@ -1,0 +1,284 @@
+# -- Modular settings ---------------------------------------------------------
+# These settings are imported in the __init__.py of the base directory explicitly.
+# To add a new setting, also edit the __init__.py
+# -----------------------------------------------------------------------------
+from dataclasses import dataclass
+import functools
+
+from . import paths
+from . import security
+
+
+# LOGGING
+# ------------------------------------------------------------------------------
+# https://docs.djangoproject.com/en/4.2/ref/settings/#logging
+
+# The following loglevels are available:
+# - CRITICAL    (50)    ...
+# - FATAL       (50)    CRASH, data loss imminent, shutdown to prevent further damage
+# - ERROR       (40)    exceptions, runtime errors, forces user intervention
+# - WARNING     (30)    something went wrong, the application can recover
+# - INFO        (20)    service information that should always be available
+# - DEBUG       (10)    diagnostics
+# - NOTSET       (0)    -
+# The default level shall be WARNING.
+# The default level for the console can be INFO.
+
+# The following levels are not implemented in python's logging module by default
+# - EMERGENCY  (100)    CRASH, forces user intervention and alerts immediately
+# - NOTICE      (25)    something more important happened
+# - TRACE        (5)    trace and find specific parts
+# import logging
+# setattr(logging, "EMERGENCY", 100)
+# setattr(logging, "NOTICE", 25)
+# setattr(logging, "TRACE", 5)
+
+# The logging-filter 'log_database_queries' will log to the file, if LOG_DATABASE is True
+# Turn it only on in develop
+LOG_DATABASE = False
+
+# See https://docs.djangoproject.com/en/4.2/topics/logging for
+# more details on how to customize your logging configuration.
+LOGGING_FILE_HANDLER = "logging.FileHandler"  # "logging.handlers.TimedRotatingFileHandler"
+
+LOGGING: dict = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "verbose": {
+            "format": "{levelname} {asctime} {module} {process:d} {thread:d} {message}",
+            "style": "{",
+        },
+        "simple": {
+            "format": "{levelname} {asctime} {message}",
+            "style": "{",
+        },
+        "rich": {
+            "datefmt": "[%X]",
+        },
+    },
+    "filters": {
+        "require_debug_false": {
+            "()": "django.utils.log.RequireDebugFalse",
+        },
+        "require_debug_true": {
+            "()": "django.utils.log.RequireDebugTrue",
+        },
+        "log_database_queries": {
+            "()": "config.logfilters.LogDatabaseQueriesFilter",
+        },
+    },
+    "handlers": {
+        "console": {
+            "level": "INFO",
+            "filters": ["require_debug_true"],
+            "class": "logging.StreamHandler",
+            "formatter": "simple" if security.DEBUG else "verbose",
+        },
+        "console.rich": {
+            "class": "rich.logging.RichHandler",
+            "formatter": "rich",
+            "level": "DEBUG",
+            # "propagate": False,  # do not propagate to the parent logger (console), rich does not support it yet
+        },
+        "requests_file": {
+            "level": "INFO",
+            "class": LOGGING_FILE_HANDLER,
+            "filename": str(paths.ROOT_DIR / "logs" / "requests.log"),
+        },
+        "database_queries_file": {
+            "level": "DEBUG",
+            "filters": ["log_database_queries"],
+            "class": LOGGING_FILE_HANDLER,
+            "filename": str(paths.ROOT_DIR / "logs" / "queries.log"),
+        },
+        "server_log_file": {
+            "level": "INFO",
+            "class": LOGGING_FILE_HANDLER,
+            "filename": str(paths.ROOT_DIR / "logs" / "server.log"),
+            "formatter": "verbose",
+        },
+        "error_log_file": {
+            "level": "ERROR",
+            "class": LOGGING_FILE_HANDLER,
+            "filename": str(paths.ROOT_DIR / "logs" / "errors.log"),
+            "formatter": "verbose",
+        },
+        "ordermanagement_log_file": {
+            "level": "DEBUG",
+            "class": LOGGING_FILE_HANDLER,
+            "filename": str(paths.ROOT_DIR / "logs" / "ordermanagement.log"),
+            "formatter": "simple",
+        },
+        "sharepoint_log_file": {
+            "level": "DEBUG",
+            "class": LOGGING_FILE_HANDLER,
+            "filename": str(paths.ROOT_DIR / "logs" / "sharepoint.log"),
+            "formatter": "simple",
+        },
+        "plans_log_file": {
+            "level": "DEBUG",
+            "class": LOGGING_FILE_HANDLER,
+            "filename": str(paths.ROOT_DIR / "logs" / "plans.log"),
+            "formatter": "simple",
+        },
+        "datalake_log_file": {
+            "level": "DEBUG",
+            "class": LOGGING_FILE_HANDLER,
+            "filename": str(paths.ROOT_DIR / "logs" / "datalake.log"),
+            "formatter": "simple",
+        },
+        "celery_log_file": {
+            "level": "DEBUG",
+            "class": LOGGING_FILE_HANDLER,
+            "filename": str(paths.ROOT_DIR / "logs" / "celery.log"),
+            "formatter": "simple",
+        },
+        "celery_beat_log_file": {
+            "level": "DEBUG",
+            "class": LOGGING_FILE_HANDLER,
+            "filename": str(paths.ROOT_DIR / "logs" / "celery-beat.log"),
+            "formatter": "simple",
+        },
+        "celery_worker_log_file": {
+            "level": "DEBUG",
+            "class": LOGGING_FILE_HANDLER,
+            "filename": str(paths.ROOT_DIR / "logs" / "celery-worker.log"),
+            "formatter": "simple",
+        },
+        "celery_events_log_file": {
+            "level": "DEBUG",
+            "class": LOGGING_FILE_HANDLER,
+            "filename": str(paths.ROOT_DIR / "logs" / "celery-event.log"),
+            "formatter": "simple",
+        },
+    },
+    "loggers": {
+        "django": {
+            "handlers": ["console", "server_log_file", "error_log_file"],
+            "level": "INFO",
+            "propagate": True,
+        },
+        "celery": {
+            "handlers": ["celery_log_file"],
+            "level": "DEBUG",
+            "propagate": True,
+        },
+        "celery.worker": {
+            "handlers": ["celery_worker_log_file"],
+            "level": "DEBUG",
+            "propagate": True,
+        },
+        "celery.beat": {
+            "handlers": ["celery_beat_log_file"],
+            "level": "DEBUG",
+            "propagate": True,
+        },
+        "celery.events": {
+            "handlers": ["celery_events_log_file"],
+            "level": "DEBUG",
+            "propagate": True,
+        },
+        "dev": {
+            "handlers": ["console.rich"],
+            "level": "DEBUG",
+            "propagate": True,
+        },
+        "rich": {
+            "handlers": ["console.rich", "error_log_file"],
+            "level": "INFO",
+            "propagate": True,
+        },
+        "core.gitops": {
+            "level": "DEBUG",
+            "propagate": True,
+            "handlers": ["console.rich", "server_log_file", "error_log_file"],
+        },
+        "core.io": {
+            "level": "DEBUG",
+            "propagate": True,
+            "handlers": ["console.rich", "server_log_file", "error_log_file"],
+        },
+        "core.exceptions": {
+            "level": "DEBUG",
+            "propagate": True,
+            "handlers": ["console.rich", "server_log_file", "error_log_file"],
+        },
+        "django.db.backends": {
+            "level": "DEBUG",
+            "handlers": ["database_queries_file", "error_log_file"],
+            "propagate": True,
+        },
+        "django.security.DisallowedHost": {
+            "level": "ERROR",
+            "handlers": ["console", "server_log_file", "error_log_file"],
+            "propagate": False,
+        },
+        "django.datalake": {
+            "handlers": [
+                "datalake_log_file",
+            ],
+            "level": "DEBUG",
+            "propagate": False,
+        },
+        "django.sharepoint": {
+            "handlers": [
+                "sharepoint_log_file",
+            ],
+            "level": "DEBUG",
+            "propagate": False,
+        },
+        "django.plans": {
+            "handlers": [
+                "plans_log_file",
+            ],
+            "level": "DEBUG",
+            "propagate": False,
+        },
+        "django.ordermanagement": {
+            "handlers": [
+                "ordermanagement_log_file",
+            ],
+            "level": "DEBUG",
+            "propagate": False,
+        },
+    },
+}
+
+
+@dataclass
+class LogGuardConfig:
+    """
+    Configuration for the core.exceptions.guard.exception function that handles
+    (and logs) exceptions and their panic level.
+    """
+
+    logger_name: str
+    log_errors: bool
+
+
+def loglevel(x_or_func=None, level: int | None = None, logger=None):
+    """
+    Decorator to set the loglevel for a function.
+    """
+    assert callable(x_or_func) or x_or_func is None
+
+    def _decorator(func):
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            if logger is None:
+                import logging
+
+                _logger = logging.getLogger(__name__)
+            else:
+                _logger = logger
+            current_level = _logger.getEffectiveLevel()
+            if level is not None:
+                _logger.setLevel(level)
+            result = func(*args, **kwargs)
+            _logger.setLevel(current_level)
+            return result
+
+        return wrapper
+
+    return _decorator(x_or_func) if callable(x_or_func) else _decorator

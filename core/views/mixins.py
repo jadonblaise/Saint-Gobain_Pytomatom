@@ -1,0 +1,16 @@
+from django.views.decorators.cache import cache_page
+
+
+class CacheMixin:
+    """
+    CacheMixin for Django class-based views, to cache the whole page for
+    `cache_timeout` seconds.
+
+    Requires CACHES setting setup (usally in config.settings.base.databases).
+    See https://docs.djangoproject.com/en/4.2/topics/cache/
+    """
+
+    cache_timeout: int = 60  # in seconds
+
+    def dispatch(self, *args, **kwargs):
+        return cache_page(self.cache_timeout)(super().dispatch)(*args, **kwargs)  # type: ignore

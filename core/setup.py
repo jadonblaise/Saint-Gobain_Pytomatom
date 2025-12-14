@@ -1,0 +1,47 @@
+import importlib
+import logging
+from pathlib import Path
+
+from environs import Env
+
+from config.settings.base import ROOT_DIR
+from core.typehints.generic import DjangoMode
+
+
+log = logging.getLogger("dev")
+
+
+def setup_django_settings(*, mode: DjangoMode, envspath: Path = ROOT_DIR / "envs"):
+    """
+    Setup django settings module depending on mode.
+    """
+    # load environment variables
+    env = Env()
+    strpath = str((envspath / f"{mode}.env").resolve())
+    env.read_env(strpath)
+    DJANGO_SETTINGS_MODULE = env.str("DJANGO_SETTINGS_MODULE")
+
+    # load django settings, this is a bit complicated doing it manually because we
+    # inject a single settings (the TRUTH object) - built from all settings-files consecutively
+    # into the django settings module
+    from django.conf import global_settings as local_settings
+
+    base_settings = importlib.import_module("config.settings.base")
+    mode_settings = importlib.import_module(DJANGO_SETTINGS_MODULE)
+    for attribute in dir(base_settings):
+        setattr(local_settings, attribute, getattr(base_settings, attribute))
+    for attribute in dir(mode_settings):
+        setattr(local_settings, attribute, getattr(mode_settings, attribute))
+
+    from django.conf import settings
+
+    try:
+        settings.configure(default_settings=local_settings)
+    except RuntimeError:
+        pass
+
+    # now this works as excpeted and django apps are loaded..
+    import django
+
+    django.setup()
+    log.debug(f"Django was setup manually with {DJANGO_SETTINGS_MODULE=}")

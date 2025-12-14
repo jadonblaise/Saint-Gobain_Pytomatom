@@ -1,0 +1,84 @@
+"""
+Django settings for pytomatom project in test mode
+
+Make sure to override `DJANGO_SETTINGS_MODULE` environment variable to use this file.
+See `base.py` for basic settings.
+
+For the full list of settings and their values, see
+https://docs.djangoproject.com/en/4.1/ref/settings/
+
+"""
+
+
+from urllib.parse import ParseResult
+
+from corsheaders.defaults import default_methods
+
+from .environment.setup import prepare  # noqa: F403 NOSONAR
+from .base import *  # noqa: E402 F403 NOSONAR  pylint: disable=unused-wildcard-import,wildcard-import
+
+# read environment variables from .env and update the local environment
+env, settings = prepare(mode="test")
+locals().update(settings)
+
+# ignore linting errors for undefined names (e.g. env after base * import)
+# ruff: noqa: F405
+
+
+SECRET_KEY = env.str("DJANGO_SECRET_KEY")
+
+# =====PROJECT-SPECIFIC-SETTINGS===============================================
+# add project specific production settings here
+PROJECT_FQDN: ParseResult = env.url("PROJECT_FQDN")
+PROJECT_FRONTEND_FQDN: ParseResult = env.url("PROJECT_FRONTEND_FQDN", default="http://localhost:3000")
+PROJECT_URL: str = PROJECT_FQDN.geturl()
+PROJECT_DOMAIN: str = PROJECT_FQDN.netloc.split(":")[0]
+
+
+# Production checklist:
+# See https://docs.djangoproject.com/en/4.1/howto/deployment/checklist/
+# =============================================================================
+
+
+# DEBUG
+# ------------------------------------------------------------------------------
+# Turn debug off so tests run faster
+DEBUG = False
+
+DJANGO_RUNS_IN_TESTMODE = True
+
+ALLOWED_HOSTS = ["testserver"]
+CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_METHODS = list(default_methods)
+
+INSTALLED_APPS += []
+
+
+CACHES["jwt-blacklist"]["BACKEND"] = "django.core.cache.backends.locmem.LocMemCache"  # type: ignore[index]
+
+# redis url is dependant on the environment
+# pylint: disable=undefined-variable
+CACHES["redis"]["LOCATION"] = REDIS_URL  # type: ignore[index, name-defined] # noqa: F405
+# http://docs.celeryproject.org/en/latest/userguide/configuration.html#std:setting-broker_url
+CELERY_BROKER_URL = REDIS_URL  # type: ignore[name-defined] # noqa: F405
+# http://docs.celeryproject.org/en/latest/userguide/configuration.html#std:setting-result_backend
+CELERY_RESULT_BACKEND = CELERY_BROKER_URL
+# pylint: enable=undefined-variable
+
+# https://docs.djangoproject.com/en/4.1/ref/settings/#test-runner
+TEST_RUNNER = "test.runners.PytestTestRunner"
+TEST_FAKER_SEED = 1337
+
+# EMAIL
+# ------------------------------------------------------------------------------
+# https://docs.djangoproject.com/en/4.1/ref/settings/#email-backend
+EMAIL_BACKEND = "django.core.mail.backends.locmem.EmailBackend"
+# https://docs.djangoproject.com/en/4.1/ref/settings/#email-host
+EMAIL_HOST = "localhost"
+# https://docs.djangoproject.com/en/4.1/ref/settings/#email-port
+EMAIL_PORT = 1025
+
+# Make tests faster by using a noop hasher
+PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
+
+LOGGING["loggers"]["django.db.backends"]["level"] = "INFO"

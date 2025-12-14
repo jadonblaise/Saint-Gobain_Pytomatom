@@ -1,0 +1,240 @@
+from functools import cache
+from pathlib import Path
+from typing import Any
+
+import msgspec
+import tomlkit
+
+from . import gitops
+
+
+class PyProjectTomlLoadException(Exception):
+    pass
+
+
+class PyProjectTomlWriteException(Exception):
+    pass
+
+
+class PyProjectHasBeenSetupBeforeException(Exception):
+    pass
+
+
+class Base(msgspec.Struct, omit_defaults=True, forbid_unknown_fields=True, rename="kebab"):
+    """A base class holding some common settings.
+    We set ``omit_defaults = True`` to omit any fields containing only their
+    default value from the output when encoding.
+    - We set ``forbid_unknown_fields = True`` to error nicely if an unknown
+    field is present in the input TOML. This helps catch typo errors early,
+    and is also required per PEP 621.
+    - We set ``rename = "kebab"`` to rename all fields to use kebab case when
+    encoding/decoding, as this is the convention used in pyproject.toml. For
+    example, this will rename ``requires_python`` to ``requires-python``.
+    """
+
+    pass
+
+
+class BuildSystem(Base):
+    requires: list[str] = []
+    build_backend: str | None = None
+    backend_path: list[str] = []
+
+
+class Readme(Base):
+    file: str | None = None
+    text: str | None = None
+    content_type: str | None = None
+
+
+class License(Base):
+    file: str | None = None
+    text: str | None = None
+
+
+class Contributor(Base):
+    name: str | None = None
+    email: str | None = None
+
+
+class Project(Base):
+    name: str | None = None
+    version: str | None = None
+    description: str | None = None
+    readme: str | Readme | None = None
+    license: str | License | None = None
+    authors: list[Contributor] = []
+    maintainers: list[Contributor] = []
+    keywords: list[str] = []
+    classifiers: list[str] = []
+    urls: dict[str, str] = {}
+    requires_python: str | None = None
+    dependencies: list[str] = []
+    optional_dependencies: dict[str, list[str]] = {}
+    scripts: dict[str, str] = {}
+    gui_scripts: dict[str, str] = {}
+    entry_points: dict[str, dict[str, str]] = {}
+    dynamic: list[str] = []
+
+
+class Template(Base):
+    repository: str | None = None
+    commithash: str | None = None
+    latesthash: str | None = None
+    templateused: str | None = None
+
+
+class PyProject(Base):
+    build_system: BuildSystem | None = None
+    project: Project | None = None
+    tool: dict[str, dict[str, Any]] = {}
+    template: Template | None = None
+
+
+@cache
+def load_pyproject(project_path: Path) -> PyProject:
+    """
+    loading pyproject.toml with [msgspec](https://jcristharif.com/msgspec/)
+    -> https://jcristharif.com/msgspec/examples/pyproject-toml.html
+    """
+    content: str = read_pyproject(path=project_path)
+    project: PyProject = decode(content)
+    return project
+
+
+def read_pyproject(*, path: Path) -> str:
+    """
+    Reading the file pyproject.toml
+    """
+    try:
+        with open(path / "pyproject.toml") as file:
+            content = file.read()
+    except FileNotFoundError:
+        raise PyProjectTomlLoadException(f"pyproject.toml not found in {path}")
+    except OSError as e:
+        raise PyProjectTomlLoadException(f"error while reading pyproject.toml from {path}: {e}")
+    return content
+
+
+def write_pyproject(*, path: Path, content: str) -> None:
+    """
+    Writing the file pyproject.toml
+
+    """
+    try:
+        with open(path / "pyproject.toml", "w") as file:
+            file.write(content)
+    except OSError as e:
+        raise PyProjectTomlWriteException(f"error while writing pyproject.toml to {path}: {e}")
+
+
+def modify_pyproject(*, project_path: Path, modification: dict):
+    """
+    modifiying pyproject.toml with
+    [tomlkit](https://github.com/sdispater/tomlkit) to preserve comments,
+    formatting and multiline strings
+
+    """
+    content: str = read_pyproject(path=project_path)
+    pyproject = tomlkit.parse(content)
+    for key, values in modification.items():
+        if key not in pyproject:
+            table = tomlkit.table()
+            pyproject.add(f"{key}", table)
+        for subkey, value in values.items():
+            pyproject[key][subkey] = value  # type: ignore
+
+    return write_pyproject(path=project_path, content=tomlkit.dumps(pyproject))
+
+
+def decode(data: bytes | str) -> PyProject:
+    """Decode a ``pyproject.toml`` file from TOML"""
+    return msgspec.toml.decode(data, type=PyProject)
+
+
+def encode(msg: PyProject) -> bytes:
+    """Encode a ``PyProject`` object to TOML"""
+    return msgspec.toml.encode(msg)
+
+
+def initialize_template_section_to_pyproject(
+    *, project_root_path: Path, template_repository_url: str, template_commit_hash: str
+):
+    """
+    initialize template section to pyproject.toml
+    """
+    project = load_pyproject(project_path=project_root_path)
+    if project.template is None:
+        raise PyProjectTomlLoadException("Template section is missing.")
+    if project.template.latesthash is not None and project.template.commithash is not None:
+        raise PyProjectHasBeenSetupBeforeException("Template section is already initialized.")
+    return modify_pyproject(
+        modification={
+            "template": {
+                "repository": template_repository_url,
+                "commithash": template_commit_hash,
+                "latesthash": template_commit_hash,
+            }
+        },
+        project_path=project_root_path,
+    )
+
+
+def update_latest_commithash(*, project_root_path: Path, latesthash: str):
+    return modify_pyproject(
+        modification={
+            "template": {
+                "latesthash": latesthash,
+            }
+        },
+        project_path=project_root_path,
+    )
+
+
+def django_startproject_jinja_context(pyproject: PyProject) -> dict:
+    """
+    Context used in the startproject management command for Django.
+
+    Requires Django setup.
+    """
+    name = pyproject.tool["poetry"]["name"]
+    if name is None:
+        raise ValueError("A project name must be provided in the [tool.poetry] section of the pyproject.toml.")
+    django_version = pyproject.tool["poetry"]["dependencies"]["Django"]
+    if django_version is None:
+        raise ValueError(
+            "A django version must be specified in the [tool.poetry.dependencies] section of the pyproject.toml."
+        )
+
+    django_version = django_version.lstrip("^").lstrip("~")
+    docs_version = ".".join(django_version.split(".")[:2])
+
+    # lazy
+    from django.conf import settings
+
+    context = {
+        "project_name": name,
+        "project_directory": settings.ROOT_DIR,
+        "secret_key": settings.SECRET_KEY,
+        "docs_version": docs_version,
+        "django_version": django_version,
+    }
+    return context
+
+
+def cherry_pick(*, pyproject_path: Path):
+    """
+    cherry pick changes from template repository to the project
+    """
+    pyproject = load_pyproject(pyproject_path)
+
+    old = pyproject.template.latesthash  # type: ignore
+    url = pyproject.template.repository  # type: ignore
+    templateused = pyproject.template.templateused  # type: ignore
+
+    if old is None or url is None or templateused is None:
+        raise PyProjectTomlLoadException(f"Template section is not initialized - {old=} - {url=}")
+
+    context = django_startproject_jinja_context(pyproject=pyproject)
+
+    # deprecated

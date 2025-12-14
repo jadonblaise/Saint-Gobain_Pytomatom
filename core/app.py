@@ -1,0 +1,15 @@
+from django.apps import AppConfig
+
+
+class CoreConfig(AppConfig):
+    default_auto_field = "django.db.models.BigAutoField"
+    name = "core"
+
+    def ready(self):
+        """
+        ! import here to avoid circular imports
+        """
+        # run system checks on every hot reload
+        from . import checks  # noqa: F401
+
+        ...

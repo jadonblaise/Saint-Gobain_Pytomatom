@@ -1,0 +1,22 @@
+# -- Modular settings ---------------------------------------------------------
+# These settings are imported in the __init__.py of the base directory explicitly.
+# To add a new setting, also edit the __init__.py
+# -----------------------------------------------------------------------------
+from corsheaders.defaults import (
+    default_headers,
+    # default_methods,
+)
+
+
+# SECURITY WARNING: don't run with debug turned on in production!
+DEBUG: bool = False
+
+ALLOWED_HOSTS: list[str] = []
+
+# CORS settings
+CORS_ALLOWED_ORIGINS: list[str] = []
+CORS_ALLOW_METHODS: list[str] = []  # list(default_methods)
+CORS_ALLOW_HEADERS: list[str] = list(default_headers) + []
+
+# SECURITY WARNING: keep the secret key used in production secret!
+SECRET_KEY = None

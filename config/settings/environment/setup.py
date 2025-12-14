@@ -1,0 +1,50 @@
+from pathlib import Path
+
+from environs import Env
+
+from core.typehints.generic import DjangoMode
+
+
+def read_environment(*, path: Path, env: Env, skip_missing: bool = False, override: bool = False) -> Env:
+    """
+    Read environment variables from .env file.
+    return the environment object.
+
+    """
+    # OS environment variables take precedence over variables from .env
+    if not path.exists():
+        if skip_missing:
+            return env
+        raise ValueError(f"Tried to read. But dotenv file does not exist (create {path=})")
+    env.read_env(str(path.resolve()), override=override)
+    return env
+
+
+def prepare(mode: DjangoMode) -> tuple[Env, dict]:
+    env = Env()
+    # Providing access to the projects environment variables.
+    from ..base.paths import ROOT_DIR  # pylint: disable=relative-beyond-top-level,import-outside-toplevel
+
+    # skip missing .env file in production
+    skip_missing = mode == "production"
+    # Read environment from <mode>.env
+    env = read_environment(path=ROOT_DIR / "envs" / f"{mode}.env", env=env, skip_missing=skip_missing, override=True)
+
+    return setup_base_settings_for(env=env)
+
+
+def setup_base_settings_for(env: Env) -> tuple[Env, dict]:
+    """
+    Setup base settings for the project.
+    """
+    # lazy import to avoid circular imports
+    from ..base.databases import define_databases  # pylint: disable=relative-beyond-top-level,import-outside-toplevel
+    from ..base.pytomatom.sharepoint import (
+        read_sharepoint_secrets,
+    )  # pylint: disable=relative-beyond-top-level,import-outside-toplevel
+
+    databases: dict = define_databases(env=env)
+    sharepoint_secrets: dict = read_sharepoint_secrets(env=env)
+    # merge settings that use environment variables
+    settings = {**databases, **sharepoint_secrets}
+    return env, settings

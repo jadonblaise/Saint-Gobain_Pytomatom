@@ -1,0 +1,46 @@
+version: '3.9'
+
+services:
+
+  pytomatom_postgres:
+    image: postgres:15
+    restart: always
+    volumes:
+      - pytomatom_postgres_data:/var/lib/postgresql/data
+    env_file:
+        - ../envs/develop.env
+    container_name: pytomatom_postgres
+    ports:
+      - "5432:5432"
+    networks:
+      - pytomatom_network
+
+  pytomatom_redis:
+    image: redis:7.2
+    restart: always
+    volumes:
+      - pytomatom_redis_data:/data
+    ports:
+      - "6379:6379"
+    env_file:
+        - ../envs/develop.env
+    command: >
+      --requirepass secret
+    container_name: pytomatom_redis
+    networks:
+      - pytomatom_network
+
+
+volumes:
+  pytomatom_postgres_data:
+    name: pytomatom_postgres_data
+  pytomatom_redis_data:
+    name: pytomatom_redis_data
+
+networks:
+  pytomatom_network:
+    name: pytomatom_network
+    ipam:
+      driver: default
+      config:
+        - subnet: "172.12.45.0/24"

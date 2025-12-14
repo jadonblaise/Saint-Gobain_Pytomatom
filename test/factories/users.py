@@ -1,0 +1,69 @@
+from typing import Any
+
+from faker import Factory as FakerFactory
+
+from django.conf import settings
+from django.contrib.auth import get_user_model
+
+from core.typehints.django import UserType, AdminUserType
+
+
+# for all providers see: https://faker.readthedocs.io/en/master/providers.html
+# typehinting for faker is not available yet, so we have to use Any
+faker: Any = FakerFactory.create()
+# ! Faker will have a seed in test mode
+faker.seed(settings.TEST_FAKER_SEED)  # type: ignore[misc]
+
+
+def generic_user_factory(
+    name: str = "",
+    email: str = "",
+    password: str = "",
+    is_staff: bool = False,
+    is_active: bool = False,
+) -> UserType:
+    """
+    User factory.
+    Produces a generic "the user" fixture.
+    """
+    name = name if name else f"{faker.first_name()} {faker.last_name()}"
+    password = (
+        password
+        if password
+        else faker.password(length=36, special_chars=True, digits=True, upper_case=True, lower_case=True)
+    )
+    first_name, last_name = name.split(" ", 1)
+    email = email if email else f"{last_name.lower()}.{first_name.lower()}@{faker.domain_name()}"
+
+    user = get_user_model().objects.create(
+        name=name,
+        email=email,
+        is_staff=is_staff,
+        is_active=is_active,
+    )
+    user.set_password(raw_password=password)
+    user.save()
+    return user
+
+
+def admin_user_factory(
+    name: str = "",
+    email: str = "",
+    password: str = "",
+    is_staff: bool = False,
+    is_active: bool = False,
+) -> AdminUserType:
+    """
+    AdminUser factory.
+    Produces an adminuser fixture
+    """
+    user: AdminUserType = generic_user_factory(
+        name=name,
+        email=email,
+        password=password,
+        is_staff=is_staff,
+        is_active=is_active,
+    )  # type: ignore[assignment]
+    user.is_superuser = True
+    user.save()
+    return user

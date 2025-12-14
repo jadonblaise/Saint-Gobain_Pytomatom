@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+{% load static %}
+
+<head>
+  <link rel="stylesheet" href="{% static 'css/styles.css' %}">
+
+  {# TODO: replace with static tailwind... #}
+  <script src="https://cdn.tailwindcss.com"></script>
+  {# TODO: replace with default webfont and serve static as woff2... #}
+  <link href="https://fonts.googleapis.com/css2?family=Exo:wght@400;700&amp;Roboto:wght@300;500;700;900&amp;display=swap" rel="stylesheet">
+  {# TODO: replace with static alpine... #}
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  {# TODO: replace with static htmx... #}
+  <script src="https://unpkg.com/htmx.org@1.9.10" integrity="sha384-D1Kt99CQMDuVetoL1lrYwg5t+9QdHe7NLX/SoJYkXDFfX37iInKRy5xLSi8nO7UC" crossorigin="anonymous"></script>
+
+  {% block extra_header %}
+  {% endblock %}
+
+  <title>
+    {% block title %}
+      pytomatom - ordermanagement
+    {% endblock %}
+  </title>
+
+</head>
+
+<body>
+
+  <div class="flex flex-col min-h-screen">
+
+    <header class="sticky top-0 w-full h-10 z-50 flex flex-row bg-white items-center justify-between">
+      <nav class=" pl-2 justify-self-start text-white">NAV{# TODO: include NAV compontent #}</nav>
+      <headline class="w-full text-start h-10 px-4">
+        {% block headline %}
+        {% endblock %}
+      </headline>
+      <user class="pr-2 text-white">USER{# TODO: include 'user profile or login' component #}</user>
+    </header>
+
+    <main class="grow flex items-center">
+      {% block content %}
+      {% endblock %}
+    </div>
+    </main>
+
+  </div>
+
+    <footer class="sticky bottom-0 z-50 -mt-10 w-full h-10 bg-gradient-to-r from-blue-950 to-sky-600 p-0 text-center text-white">
+        {% comment %} correcting the height of the footer matching the image with -top-y 'overlay'  {% endcomment %}
+        <img class="relative bg-gray-500-300 -right-20 -top-14 h-24 pr-8" src="{% static 'images/sg-cartouche.png' %}" alt="saint-gobain-cartouche">
+    </footer>
+
+
+
+</body>
+
+</html>

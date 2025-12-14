@@ -1,0 +1,31 @@
+# app.service
+#
+# For spawning a web application as a systemd service.
+#
+[Unit]
+Description=WebApplication
+Documentation=Consult the automation agent for infos on the WebApplication running on this localhost
+Wants=nginx.service
+After=nginx.service
+
+# Combined with Restart=5, this will always and forever restart the service if it dies without putting too much stress on it.
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+WorkingDirectory=/app/src
+User=app
+Group=app
+
+Environment="PATH=$PATH:/app/src/.venv/bin"
+Environment="GIT_PYTHON_GIT_EXECUTABLE=/usr/bin/git"
+EnvironmentFile=/app/src/envs/production.env
+
+ExecStart=/app/src/.venv/bin/gunicorn config.wsgi:application --timeout 600
+ExecReload=/app/src/.venv/bin/bin/gunicorn config.wsgi:application --timeout 600
+
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

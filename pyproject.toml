@@ -1,0 +1,242 @@
+[tool.poetry]
+name = "pytomatom"
+version = "0.6.12"
+description = "Pytomatom automated order management and annotations for glass."
+authors = ["Dominik Geldmacher <dominik.geldmacher@saint-gobain.com>", "Markus Fleischer <markus.fleischer@saint-gobain.com>"]
+readme = "README.md"
+packages = [{include = "apps"}, {include = "config"}, {include = "core"}]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+gunicorn = "^20.1.0"
+Django = "^5.1.14"
+django-cors-headers = "^3.13.0"
+django-csp = "^3.7"
+django-permissions-policy = "^4.16.0"
+django-extensions = "^3.2.1"
+django-rich = "^1.4.0"
+msgspec = "^0.13.1"
+pandas = "^2.0.0"
+openpyxl = "^3.1.2"
+ibis-framework = {extras = ["impala"], version = "^7.1.0"}
+gitpython = "^3.1.31"
+tomlkit = "^0.11.8"
+pytest-vcr = "^1.0.2"
+pytest-instafail = "^0.5.0"
+pytest-cov = "^4.1.0"
+hypothesis = {extras = ["django"], version = "^6.82.0"}
+msal = "^1.23.0"
+jinja2 = "^3.1.2"
+git-fame = "^2.0.1"
+djangorestframework-stubs = {extras = ["compatible-mypy"], version = "^3.14.3"}
+django-stubs = {extras = ["compatible-mypy"], version = "^4.2.4"}
+django-stubs-ext = "^4.2.2"
+mypy = "^1.5.1"
+djangorestframework = "^3.14.0"
+celery = "^5.3.4"
+django-celery-beat = "^2.5.0"
+redis = "^5.0.1"
+django-redis = "^5.4.0"
+django-celery-results = "^2.5.1"
+flower = "^2.0.1"
+pydantic = "^2.4.2"
+setproctitle = "^1.3.3"
+marshmallow = "^3.26"
+click = "^8.1.8"
+django-debug-toolbar = "^6.1.0"
+
+[tool.poetry.group.django]
+optional = false
+[tool.poetry.group.django.dependencies]
+django-readers = "^2.1.1"
+django-widget-tweaks = "^1.4.12"
+django-crispy-forms = "^1.14.0"
+crispy-tailwind = "^0.5.0"
+
+[tool.poetry.group.cli]
+optional = false
+[tool.poetry.group.cli.dependencies]
+typer = "^0.9.0"
+
+[tool.poetry.group.test]
+optional = false
+[tool.poetry.group.test.dependencies]
+coverage = "^6.4.4"
+pytest = "^7.1.3"
+pytest-django = "^4.5.2"
+pytest-rich = "^0.1.1"
+pytest-cov = "^4.1.0"
+pytest-vcr = "^1.0.2"
+pytest-instafail = "^0.5.0"
+hypothesis = {extras = ["django"], version = "^6.82.0"}
+faker = "^16.6.0"
+freezegun = "^1.2.2"
+
+[tool.poetry.group.commithooks]
+optional = false
+[tool.poetry.group.commithooks.dependencies]
+djhtml = "^1.5.2"
+pre-commit = "^2.20.0"
+
+[tool.poetry.group.linter]
+optional = false
+# run ruff with: poetry run ruff check .
+# run flake8 with: poetry run flake8
+[tool.poetry.group.linter.dependencies]
+ruff = "^0.0.260"
+flake8-pyproject = "^1.2.3"
+
+[tool.poetry.group.formatter]
+optional = false
+# run black with: poetry run black check .
+# run isort with: poetry run isort .
+[tool.poetry.group.formatter.dependencies]
+black = {extras = ["jupyter"], version = "^23.3.0"}
+isort = "^5.12.0"
+
+[tool.poetry.group.typechecker]
+optional = false
+# run mypy with: poetry run mypy --config-file pyproject.toml .
+[tool.poetry.group.typechecker.dependencies]
+# mypy = "1.5.1"
+types-toml = "^0.10.8.6"
+
+[tool.poetry.group.debugging]
+optional = false
+[tool.poetry.group.debugging.dependencies]
+jupyter = "^1.0.0"
+
+[tool.poetry.group.paragons]
+optional = false
+[tool.poetry.group.paragons.dependencies]
+humanize = "^4.3.0"
+pendulum = "^2.1.2"
+dill = "^0.3.5.1"
+passlib = "^1.7.4"
+httpx = "^0.23.0"  # also used in some jupyter dev-notebooks
+
+[tool.poetry.group.authentication]
+optional = false
+[tool.poetry.group.authentication.dependencies]
+python-jose = {extras = ["cryptography"], version = "^3.3.0"}
+
+[tool.poetry.group.environment]
+optional = false
+[tool.poetry.group.environment.dependencies]
+environs = "^9.5.0"
+rich = "^13.6.0"
+textual = "^0.38.1"
+doppler-env = "^0.3.1"
+
+[tool.poetry.group.postgres]
+optional = false
+[tool.poetry.group.postgres.dependencies]
+psycopg = {extras = ["binary"], version = "^3.1.12"}
+
+[tool.pyright]
+exclude = [
+    "**/node_modules",
+    "**/__pycache__",
+]
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "config.settings.test"
+# The addopts enforces calling single tests with: pytest apps/myapp/tests.py::test_mytest
+addopts = "-m 'not slow' -p no:warnings --instafail --vcr-record=none --cov --"
+python_files = "tests.py test_*.py *_tests.py"
+norecursedirs = ".git staticfiles docs assets logs media notebooks temp"
+xfail_strict = true
+
+[tool.coverage.run]
+branch = true
+source = ["apps"]
+omit = ["apps/*/tests/*", "apps/*/migrations/*"]
+command_line = "-m pytest"
+
+[tool.ruff]
+line-length = 199
+
+[tool.black]
+line-length = 119
+exclude = '''
+(
+  /(
+      \.eggs         # exclude a few common directories in the
+    | \.git          # root of the project
+    | build
+    | dist
+    | pyproject.toml
+  )/
+)
+'''
+
+[tool.isort]
+profile = "black"
+line_length=119
+multi_line_output = 3
+include_trailing_comma = true
+split_on_trailing_comma = true  # black compatible
+no_inline_sort = true
+no_lines_before = ["future", "stdlib"]
+combine_star = true
+lines_between_types = 0
+lines_after_imports = 2
+lines_between_sections = 1
+skip = [
+  '.eggs',
+  '.git',
+  '.mypy_cache',
+  '.venv',
+  '_build',
+  'build',
+  'dist',
+  'node_modules',
+  'venv'
+]
+skip_glob = [
+  "*/node_modules/*",
+  "*/config/settings/*.py",
+]
+extend_skip = [".md", ".json"]
+default_section = "THIRDPARTY"
+known_first_party = ["config", "core", "test", "apps"]
+src_paths = ["config", "core", "test", "apps", "manage.py"]
+known_django = "django"
+sections = ['FUTURE', 'STDLIB', 'THIRDPARTY', 'DJANGO', 'FIRSTPARTY', 'LOCALFOLDER']
+
+[tool.flake8]
+statistics = "True"
+extend-ignore = [
+  "E203",  # whitespace before ':' - for black compatibility
+]
+per-file-ignores = [
+  "config/settings/base/__init__.py:F401",
+  "config/settings/base/thirdparty/__init__.py:F401",
+  "config/settings/base/pytomatom/__init__.py:F401",
+  "config/settings/develop.py:F405",
+  "config/settings/production.py:F405",
+  "config/settings/test.py:F405",
+]
+exclude = '''
+    **/migrations/*,
+    .git,
+    '''
+max-line-length = 199
+
+[tool.mypy]
+ignore_missing_imports = true
+ignore_missing_imports_per_module = true
+warn_unused_ignores = false
+namespace_packages = true
+explicit_package_bases = true
+check_untyped_defs = false
+plugins = ["mypy_django_plugin.main"]
+# [tool.mypy.plugins.django-stubs]
+# django_settings_module = "config.settings.develop"
+[tool.django-stubs]
+django_settings_module = "config.settings.develop"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+

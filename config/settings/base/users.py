@@ -1,0 +1,33 @@
+# -- Modular settings ---------------------------------------------------------
+# These settings are imported in the __init__.py of the base directory explicitly.
+# To add a new setting, also edit the __init__.py
+# -----------------------------------------------------------------------------
+# Users
+# -----------------------------------------------------------------------------
+# https://docs.djangoproject.com/en/4.1/ref/settings/#auth-user-model
+# -> auth.User if you don't want to use the customized userapp. Remember to
+# also inactivate the users app in INSTALLED_APPS. BEFORE you do any migrations.
+AUTH_USER_MODEL = "users.User"
+
+# Password validation
+# https://docs.djangoproject.com/en/4.1/ref/settings/#auth-password-validators
+
+AUTH_PASSWORD_MINIMUM_LENGTH = 12
+
+# fmt: off
+AUTH_PASSWORD_VALIDATORS = [
+    {
+        "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",
+    },
+    {
+        "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
+        "OPTIONS": {"min_length": AUTH_PASSWORD_MINIMUM_LENGTH}
+    },
+    {
+        "NAME": "django.contrib.auth.password_validation.CommonPasswordValidator",
+    },
+    {
+        "NAME": "django.contrib.auth.password_validation.NumericPasswordValidator",
+    },
+]
+# fmt: on

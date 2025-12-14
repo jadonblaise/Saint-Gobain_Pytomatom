@@ -1,0 +1,176 @@
+"""
+Django settings for pytomatom project in production mode
+
+This fill will be automatically used when using a dedicated application server.
+See `base.py` for basic settings.
+
+For the full list of settings and their values, see
+https://docs.djangoproject.com/en/4.1/ref/settings/
+
+"""
+
+
+from urllib.parse import ParseResult
+
+from .environment.setup import prepare  # noqa: F403 NOSONAR
+from .base import *  # noqa: E402 F403 NOSONAR  pylint: disable=unused-wildcard-import,wildcard-import
+
+# read environment variables from .env and update the local environment
+env, settings = prepare(mode="production")
+locals().update(settings)
+
+# ignore linting errors for undefined names (e.g. env after base * import)
+# ruff: noqa: F405
+
+DEBUG = False
+
+
+# SECRET CONFIGURATION
+# SECURITY WARNING: keep the secret key used in production secret!
+# ------------------------------------------------------------------------------
+# See: https://docs.djangoproject.com/en/{{ docs_version }}/ref/settings/#secret-key
+# Raises ImproperlyConfigured exception if DJANGO_SECRET_KEY not in os.environ
+SECRET_KEY = env.str("DJANGO_SECRET_KEY")
+
+
+# =====PROJECT-SPECIFIC-SETTINGS===============================================
+# add project specific production settings here
+PROJECT_FQDN: ParseResult = env.url("PROJECT_FQDN")
+PROJECT_FRONTEND_FQDN: ParseResult = env.url("PROJECT_FRONTEND_FQDN")
+PROJECT_URL: str = PROJECT_FQDN.geturl()
+PROJECT_DOMAIN: str = PROJECT_FQDN.netloc.split(":")[0]
+
+# Production checklist:
+# See https://docs.djangoproject.com/en/4.1/howto/deployment/checklist/
+# =============================================================================
+
+# Static files
+# STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
+
+INSTALLED_APPS += (
+    # apps for production
+)
+
+# redis url is dependant on the environment
+# pylint: disable=undefined-variable
+CACHES["redis"]["LOCATION"] = REDIS_URL  # type: ignore[index, name-defined] # noqa: F405
+# http://docs.celeryproject.org/en/latest/userguide/configuration.html#std:setting-broker_url
+CELERY_BROKER_URL = REDIS_URL  # type: ignore[name-defined] # noqa: F405
+# http://docs.celeryproject.org/en/latest/userguide/configuration.html#std:setting-result_backend
+CELERY_RESULT_BACKEND = CELERY_BROKER_URL
+# pylint: enable=undefined-variable
+
+# --- SECURITY CONFIGURATION --------------------------------------------------
+# See https://docs.djangoproject.com/en/{{ docs_version }}/ref/middleware/#module-django.middleware.security
+# and https://docs.djangoproject.com/en/{{ docs_version }}/howto/deployment/checklist/#run-manage-py-check-deploy
+
+# Custom Admin URL, use {% verbatim %}{% url 'admin:index' %}{% endverbatim %}
+ADMIN_URL = env("DJANGO_ADMIN_URL")
+
+# ------------------------------------------------------------------------------
+# Hosts/domain names that are valid for this site
+# Remember to set this to your expected hostnames
+# See https://docs.djangoproject.com/en/4.1/ref/settings/#allowed-hosts
+ALLOWED_HOSTS = env.list("DJANGO_ALLOWED_HOSTS", default=[])
+CORS_ALLOWED_ORIGINS = env.list("DJANGO_CORS_ALLOWED_ORIGINS", default=[])
+CORS_ALLOW_ALL_ORIGINS = env.bool("DJANGO_CORS_ALLOW_ALL_ORIGINS", default=False)
+CORS_ALLOW_METHODS = [
+    "GET",
+    "OPTIONS",
+    "POST",
+]
+
+SECURE_HSTS_SECONDS = (
+    60 * 60 * 24 * 365
+)  # one year man-in-the-middle-protection - this might be much too long for development and rapid prototyping
+SECURE_HSTS_INCLUDE_SUBDOMAINS = env.bool("DJANGO_SECURE_HSTS_INCLUDE_SUBDOMAINS", default=True)
+SECURE_CONTENT_TYPE_NOSNIFF = env.bool("DJANGO_SECURE_CONTENT_TYPE_NOSNIFF", default=True)
+
+# Modern browsers don’t honor X-XSS-Protection HTTP header anymore. Although
+# the setting offers little practical benefit, you may still want to set the
+# header if you support older browsers.
+SECURE_BROWSER_XSS_FILTER = False
+
+SECURE_REFERRER_POLICY = "same-origin"  # "strict-origin"
+
+SESSION_COOKIE_SECURE = True
+SESSION_COOKIE_HTTPONLY = True
+SECURE_SSL_REDIRECT = env.bool("DJANGO_SECURE_SSL_REDIRECT", default=True)
+CSRF_COOKIE_SECURE = True
+CSRF_COOKIE_HTTPONLY = True
+X_FRAME_OPTIONS = "DENY"
+
+# Content-Security-Policy: https://www.w3.org/TR/CSP/
+# See https://django-csp.readthedocs.io/en/latest/configuration.html
+# Using: https://github.com/mozilla/django-csp
+# CSP: default-src
+# serves as a fallback for the other CSP fetch directives. For each of the following directives that are absent, the
+# user agent looks for the default-src directive and uses this value for it:
+# child-src, connect-src, font-src, frame-src, img-src, manifest-src, media-src, object-src, prefetch-src, script-src,
+# script-src-elem, script-src-attr, style-src, style-src-elem, style-src-attr, worker-src
+# example: ("'self'", f"ws://{PROJECT_FQDN.netloc}")
+CSP_DEFAULT_SRC = ("'self'", f"{PROJECT_URL}")
+# CSP: connect-src
+# connect-src directive restricts the URLs which can be loaded using script interfaces.
+# The APIs that are restricted are:
+# <a> ping, fetch(), XMLHttpRequest, WebSocket, EventSource, and Navigator.sendBeacon().
+# Note: connect-src 'self' does not resolve to websocket schemes in all browsers, more info in this issue.
+# example: (f"ws://{PROJECT_FQDN.netloc}",)
+CSP_CONNECT_SRC = ("'self'", f"{PROJECT_URL}")
+# CSP: style-src
+# The HTTP Content-Security-Policy (CSP) style-src directive specifies valid sources for stylesheets.
+CSP_STYLE_SRC = (
+    "'unsafe-inline'",  # ! Tailwind needs unsafe-inline
+    "'self'",
+    f"{PROJECT_URL}",
+    "fonts.googleapis.com",
+)
+# CSP: img-src
+# The HTTP Content-Security-Policy img-src directive specifies valid sources of images and favicons.
+CSP_IMG_SRC = ("'self'", "'unsafe-eval'", f"{PROJECT_URL}")
+# CSP: script-src
+# The HTTP Content-Security-Policy (CSP) script-src directive specifies valid sources for JavaScript. This includes not
+# only URLs loaded directly into <script> elements, but also things like inline script event handlers (onclick) and
+# XSLT stylesheets which can trigger script execution.
+CSP_SCRIPT_SRC = (
+    "'self'",
+    # Alpine and tailwind both need unsafe-inline.
+    # Alpine-js needs unsafe-eval.
+    # Alpine.js [offers a mitigation for unsafe-eval](https://alpinejs.dev/advanced/csp)
+    # this is not yet implemented and you will loose some features.
+    "'unsafe-inline'",
+    "'unsafe-eval'",
+    f"{PROJECT_URL}",
+    "cdn.tailwindcss.com",  # tailwind
+    "cdn.jsdelivr.net",  # alpine
+    "unpkg.com",  # htmx
+)
+CSP_FONT_SRC = ("'self'", "fonts.gstatic.com")
+
+# Permissions-Policy: https://wicg.github.io/feature-policy/
+# https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Permissions-Policy
+# Using: https://github.com/adamchainz/django-permissions-policy
+PERMISSIONS_POLICY: dict = {
+    "accelerometer": [],
+    # "ambient-light-sensor": [],
+    "autoplay": [],
+    "camera": [],
+    "display-capture": [],
+    # "document-domain": [],
+    "encrypted-media": [],
+    "fullscreen": [],
+    "geolocation": [],
+    "gyroscope": [],
+    "interest-cohort": [],
+    "magnetometer": [],
+    "microphone": [],
+    "midi": [],
+    "payment": [],
+    "usb": [],
+}
+# -----------------------------------------------------------------------------
+# change loglevels for certain loggers from debug to info or warning to not spam the logfiles. (! disk space)
+LOGGING["loggers"]["django.plans"]["level"] = "WARNING"
+LOGGING["loggers"]["django.ordermanagement"]["level"] = "WARNING"
+LOGGING["loggers"]["django.datalake"]["level"] = "WARNING"
+LOGGING["loggers"]["django.sharepoint"]["level"] = "WARNING"

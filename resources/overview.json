@@ -1,0 +1,133 @@
+{
+    "01 Workbench PPS V3.2.xlsm": {
+        "meta": "",
+        "scripts": [
+            "Tabelle4.cls",
+            "Autoamtom.bas",
+            "COUNTRY_PLANNER.bas",
+            "DemandForecast.bas",
+            "FloatPlanernNeueWoche.bas",
+            "FloatPlanerTagesdaten.bas",
+            "MAGPlanerNeueWoche.bas",
+            "MAGPlanerTagesdaten.bas",
+            "Master_Planner.bas",
+            "ORDERM.bas",
+            "OrderManagement_MSTR.bas",
+            "StandardFunktionen.bas",
+            "Update_FLOAT.bas",
+            "Update_MAG.bas",
+            "Update_Trans.bas",
+            "Update_VSG.bas",
+            "VSGPlanerNeueWoche.bas",
+            "VSGPlanerTagesdaten.bas"
+        ]
+    },
+    "20230508_CS Requests.xlsm": {
+        "meta": "",
+        "scripts": [
+            "Modul1.bas"
+        ]
+    },
+    "Entwurf Float-Planer_inkl Formeln.xlsx": {
+        "meta": "cell formulas only",
+        "scripts": []
+    },
+    "Entwurf MAG-Planer_inkl Formeln.xlsx": {
+        "meta": "cell formulas only",
+        "scripts": []
+    },
+    "G035ProdPlanning.xlsx": {
+        "meta": "spread sheet only - no formulas",
+        "scripts": []
+    },
+    "Master Report 2.2 ES.xlsm": {
+        "meta": "",
+        "scripts": [
+            "Sheet1.cls",
+            "Sheet9.cls",
+            "Module1.bas"
+        ]
+    },
+    "PLC + Stock Simulation.xlsx": {
+        "meta": "cell formulas only",
+        "scripts": []
+    },
+    "OrderManagementPython/000_MSTR_DATA_COUNTRY_GERMANY_Planner_aktuell.xlsx": {
+        "meta": "spread sheet only - no formulas",
+        "scripts": []
+    },
+    "OrderManagementPython/G035 Auftragsbestand.xlsx": {
+        "meta": "spread sheet only - no formulas",
+        "scripts": []
+    },
+    "OrderManagementPython/ORION Bestand 2023_04_11.xlsx": {
+        "meta": "spread sheet only - no formulas",
+        "scripts": []
+    },
+    "OrderManagementPython/Produktionsprogramm G035 Float.xlsx": {
+        "meta": "spread sheet only - no formulas",
+        "scripts": []
+    },
+    "OrderManagementPython/Produktionsprogramm G035 MAG.xlsx": {
+        "meta": "cell formulas only",
+        "scripts": []
+    },
+    "OrderManagementPython/SC_DO03 Order Management PORZ.xlsx": {
+        "meta": "spread sheet only - no formulas",
+        "scripts": []
+    },
+    "OrderManagementPython/OrderManagement.py": {
+        "meta": "",
+        "scripts": []
+    },
+    "Demand Forecast/20230505 Demand Basis Datei MS.xlsx": {
+        "meta": "cell formulas only",
+        "scripts": []
+    },
+    "Demand Forecast/20230507 DACH_Forecast.xlsx": {
+        "meta": "cell formulas only",
+        "scripts": []
+    },
+    "Demand Forecast/20230507 Demand Basis Datei MS.xlsm": {
+        "meta": "",
+        "scripts": [
+            "Module1.bas"
+        ]
+    },
+    "Demand Forecast/20230509 DACH_Forecast.xlsm": {
+        "meta": "spread sheet only - no formulas",
+        "scripts": []
+    },
+    "Demand Forecast/20230509 DACH_Forecast-Test.xlsx": {
+        "meta": "spread sheet only - no formulas",
+        "scripts": []
+    },
+    "Demand Forecast/Aufbereitung Microstrategy Report.txt": {
+        "meta": "",
+        "scripts": []
+    },
+    "Demand Forecast/Coding-text.txt": {
+        "meta": "",
+        "scripts": []
+    },
+    "Demand Forecast/Demand Forecast.xls": {
+        "meta": "empty spread sheet only",
+        "scripts": []
+    },
+    "Demand Forecast/Demand Forecast.xlsx": {
+        "meta": "spread sheet only - no formulas",
+        "scripts": []
+    },
+    "Demand Forecast/MSTR Links.txt": {
+        "meta": "",
+        "scripts": []
+    },
+    "Demand Forecast/Shipping Plant Split.xlsx": {
+        "meta": "spread sheet only - no formulas",
+        "scripts": []
+    },
+    "Demand Forecast/G035G048 production LG Codes.xlsx": {
+        "meta": "static table with information about products produced only in Porz and Torgau.",
+        "scripts": []
+    }
+}

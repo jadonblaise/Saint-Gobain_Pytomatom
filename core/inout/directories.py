@@ -1,0 +1,108 @@
+import logging
+import os
+from pathlib import Path
+
+from config.settings.base.logging import LogGuardConfig
+
+from ..exceptions import guard
+from ..exceptions.io import CoreIOException
+from . import files, IO_LOGGER
+
+
+log = logging.getLogger(IO_LOGGER)
+
+# shall be ROOT_DIR / 'temp'
+TEMPORARY_DIRECTORY = Path(__file__).parent.parent.parent / "temp"
+
+
+def delete_tree(path: Path, keep_parent: bool = False, panic: bool = True, log_errors: bool = True) -> bool:
+    """
+    Deletes a folder and all its contents.
+
+    Error handling is done by the closures and the panic flag.
+    """
+    success = False
+    for element in path.iterdir():
+        if element.is_dir():
+            partial_success = delete_tree(element, panic=panic, log_errors=log_errors)
+            if not partial_success and success:
+                success = False
+        else:
+            unlinked = files.unlink(element, panic=panic, log_errors=log_errors)
+            if not unlinked and success:
+                success = False
+
+    if any(path.iterdir()):
+        return False
+    if not keep_parent:
+        deleted = delete_folder(path, panic=panic, log_errors=log_errors)
+        return success and deleted
+    return success
+
+
+def delete_folder(path: Path, panic: bool = True, log_errors: bool = True) -> bool:
+    """
+    Deletes an empty folder.
+    """
+    success = False
+    log_config = LogGuardConfig(logger_name=IO_LOGGER, log_errors=log_errors)
+
+    if not isinstance(path, Path):
+        guard.exception(exc=TypeError(f"Invalid type for path: {type(path)=}"), panic=panic, log_config=log_config)
+        return success
+
+    if not path.exists():
+        guard.exception(exc=FileNotFoundError(f"{path} does not exist."), panic=panic, log_config=log_config)
+        return success
+
+    if not path.is_dir():
+        guard.exception(exc=ValueError(f"{path} is not a directory."), panic=panic, log_config=log_config)
+        return success
+
+    if any(path.iterdir()):
+        guard.exception(exc=ValueError(f"{path} is not empty."), panic=panic, log_config=log_config)
+        return success
+
+    try:
+        path.rmdir()
+        success = True
+    except PermissionError as exception:
+        exc = CoreIOException("A permission error occurred while deleting the folder.", parent=exception)
+        guard.exception(exc=exc, panic=panic, log_config=log_config)
+    except OSError as exception:
+        exc = CoreIOException("An OS error occurred while deleting the folder.", parent=exception)
+        guard.exception(exc=exc, panic=panic, log_config=log_config)
+    except Exception as exception:  # pylint: disable=broad-exception-caught
+        exc = CoreIOException("An unexpected error occurred while deleting the folder.", parent=exception)
+        guard.exception(exc=exc, panic=panic, log_config=log_config)
+    return success
+
+
+class TemporaryDirectory:
+    """
+    A context manager that creates a temporary directory and deletes it
+    when exiting the context.
+
+    OS agnostic.
+    """
+
+    def __init__(
+        self, directory: Path = TEMPORARY_DIRECTORY, panic: bool = True, log_errors: bool = True, keep: bool = False
+    ) -> None:
+        self.panic = panic
+        self.log_errors = log_errors
+        self.keep = keep
+        self.path = directory / os.urandom(24).hex()[:16]
+
+    def __enter__(self):
+        self.path.mkdir(parents=True, exist_ok=True)
+        return self.path
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        try:
+            if not self.keep:
+                delete_tree(path=self.path, panic=self.panic, log_errors=self.log_errors)
+        except OSError as exception:
+            log_config = LogGuardConfig(logger_name=IO_LOGGER, log_errors=self.log_errors)
+            exc = CoreIOException("Error deleting temp-folder.", parent=exception)
+            guard.exception(exc=exc, panic=self.panic, log_config=log_config)
